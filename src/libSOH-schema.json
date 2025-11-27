@@ -1,0 +1,46 @@
+{
+ 	"$schema": "http://json-schema.org/draft-07/schema#",
+	"title": "libSOH main structure",
+	"description": "",
+	"type": "object",
+	"properties": {
+		"boxes": {
+			"type": "array",
+			"items": {
+				"type": "object",
+				"properties": {
+					"start": { 
+						"type": "integer",
+						"description": "Offset of the box in the full file (starting by 0)"
+					},
+					"size": { 
+						"type": "integer",
+						"description": "Size of box in bytes including the size itself and the type"
+					},
+					"type": { 
+						"type": "string",
+						"description": "Four caracters in 4ccc format or 16 bytes uuid defining the box type (e.g. 'meta')"
+					},
+					"dataOffset": { 
+						"type": "integer",
+						"description": "Offset of the data in the box from the start of the box (not from the start of the file). Commonly 8"
+					},
+					"dataView": { 
+						"type": ["object", "null"],
+						"description": "Data contained in the box after the header (commonly size and type) Can be partial or null."
+					}
+				}
+			}
+		},
+		"items": {
+			"type": "array",
+			"items": {
+				"type": "object"
+			}
+		},
+		"fileSize": { 
+			"type": "integer",
+			"description": "File size in bytes"
+		}
+	}
+}
