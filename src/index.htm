@@ -14,7 +14,7 @@ function readSOHForm(divURL, divBox, divLimit, divItem){
 async function readSOHFormAsync(divURL, divBox, divLimit, divItem){
 	var fileInfo=await readSOHBoxDumpURL(document.getElementById(divURL).value, parseInt(document.getElementById(divLimit).value), divBox, showBox);
 	if (divItem)
-		fileInfo.items=readSOHItemsDumpURL(document.getElementById(divURL).value, fileInfo, divItem, showItem);
+		fileInfo.items=await readSOHItemsDumpURL(document.getElementById(divURL).value, fileInfo, divItem, showItem);
 }
 
 function parseSOHFileTypeBox(box)
@@ -95,9 +95,16 @@ async function showBox(array, divShow) {
 }
 
 async function showItem(items, divItem) {
-	var s="<table border=1><tr><th>Id</th><th>Name</th><th>Type</th></tr>";
-	for (var i=0; i<items.length; i++)
-		s+="<tr><td>" + items[i].itemId + "</td><td>" + items[i].itemName + "</td><td>" + (items[i].itemType=='mime' ? items[i].contentType : items[i].itemType=='uri ' ? items[i].itemUriType : items[i].itemType) + "</td></tr>";
+	var s="<table border=1><tr><th>Id</th><th>Name</th><th>Type</th><th>Byte ranges</th></tr>";
+	for (var i=0; i<items.length; i++) {
+		s+="<tr><td>" + items[i].itemId + "</td><td>" + items[i].itemName + "</td><td>" + (items[i].itemType=='mime' ? items[i].contentType : items[i].itemType=='uri ' ? items[i].itemUriType : items[i].itemType) + "</td><td>";
+		if (items[i].extents) {
+			for (var j=0; j<items[i].extents.length; j++) {
+				s+="[" + items[i].extents[j].extentOffset + "-" + (items[i].extents[j].extentOffset+items[i].extents[j].extentLength-1) + "]";
+			}
+		}
+		s+="</td></tr>";
+	}
 	s+="</table>";
 	document.getElementById(divItem).innerHTML=s;
 }
@@ -131,26 +138,41 @@ async function readSOHBoxDumpURL(url, limit, divBox, showDump) {
 	return {boxes: array, fileSize: fileSize};
 }
 
-function getIndexSOHBoxType(fileInfo, type) {
-	for (var i=0; i<fileInfo.boxes.length; i++) {
-		if (fileInfo.boxes[i].type==type)
+function getIndexSOHBoxType(boxes, type) {
+	for (var i=0; i<boxes.length; i++) {
+		if (boxes[i].type==type)
 			return i;
 	}
 	return -1;
 }
 
+function getIndexSOHItemID(items, itemId) {
+	for (var i=0; i<items.length; i++) {
+		if (items[i].itemId==itemId)
+			return i;
+	}
+	return -1;
+}
+
+function getUIntegerByteSize(dataView, offset, byteSize) {
+	if (byteSize==4)
+		return dataView.getUint32(offset);
+	if (byteSize==8)
+		return dataView.getUint64(offset);
+	return 0;
+}
 
 async function readSOHItemsDumpURL(url, fileInfo, divItem, showDump) {
 	var result, resultItem, items=[], offset, offsetItem, entryCount;
 
-	var i=getIndexSOHBoxType(fileInfo, "meta/iinf");
+	var i=getIndexSOHBoxType(fileInfo.boxes, "meta/iinf");
 	if (i==-1)
 		return;
 
 	//Reading iinf as a FullBox 
 	var start=fileInfo.boxes[i].start;
 	result=await readSOHBoxURL(url, start, fileInfo.fileSize);
-	var dvOffset=result.type=="uuid" ? 24 : 8;
+	var dvOffset=result.dataOffset;
 	var dataView=result.dataView;
 	result.version=getFullBoxVersion(dataView, 0);
 	result.flags=getFullBoxFlags(dataView, 1);
@@ -215,16 +237,16 @@ async function readSOHItemsDumpURL(url, fileInfo, divItem, showDump) {
 			showDump(items, divItem);
 	}
 
-	/*
+	var idat=getIndexSOHBoxType(fileInfo.boxes, "meta/idat");  //in case constructionMethod==1;
 
-	var i=getIndexSOHBoxType(fileInfo, "meta/iloc");
+	var i=getIndexSOHBoxType(fileInfo.boxes, "meta/iloc");  
 	if (i==-1)
 		return;
 
 	//Reading iloc as a FullBox 
 	var start=fileInfo.boxes[i].start;
 	result=await readSOHBoxURL(url, start, fileInfo.fileSize);
-	var dvOffset=result.type=="uuid" ? 24 : 8;
+	var dvOffset=result.dataOffset
 	var dataView=result.dataView;
 	result.version=getFullBoxVersion(dataView, 0);
 	result.flags=getFullBoxFlags(dataView, 1);
@@ -234,8 +256,10 @@ async function readSOHItemsDumpURL(url, fileInfo, divItem, showDump) {
 	result.baseOffsetSize=dataView.getUint8(5)>>4; 
 	if (result.version == 1 || result.version == 2)
 		result.indexSize=dataView.getUint8(5)&0x0F; 
-	//else
+	else {
+		result.indexSize=0;
 	//	result.reserved=dataView.getUint8(5)&0x0F;
+	}
 
 	if (result.version < 2) {
 		result.itemCount=dataView.getUint16(6);
@@ -245,7 +269,7 @@ async function readSOHItemsDumpURL(url, fileInfo, divItem, showDump) {
  		result.itemCount=dataView.getUint32(6);
 		offset=10;
 	}
-	var itemId;
+	var itemId, item, constructionMethod;
 	for (i=0; i<result.itemCount; i++) { 
 		if (result.version < 2) { 
 			itemId=dataView.getUint16(offset);
@@ -253,23 +277,44 @@ async function readSOHItemsDumpURL(url, fileInfo, divItem, showDump) {
 		} else if (result.version == 2) { 
 			itemId=dataView.getUint32(offset);
 			offset+=4;
+		}
+
+		var z=getIndexSOHItemID(items, itemId);
+		if (z==-1)
+			continue;
+		item=items[z];
+		if (result.version == 1 || result.version == 2) { 
+			//unsigned int(12) reserved = 0; 
+			constructionMethod=dataView.getUint16(offset)&0x0F;
+			offset+=2;
+		}
+		else
+			constructionMethod=0;
+		//data_reference_index=dataView.getUint16(offset)  //the origin of the offset is the beginning of the file identified by the data_reference_index
+		offset+=2;
+		var baseOffset=getUIntegerByteSize(dataView, offset, result.baseOffsetSize);
+		offset+=result.baseOffsetSize;
+		var extentCount=dataView.getUint16(offset);
+		offset+=2;
+		item.extents=[];
+		for (var j=0; j<extentCount; j++) {
+			item.extents.push({});
+			if ((result.version == 1 || result.version == 2) && result.indexSize > 0) { 
+				item.extents[j].extentIndex=getUIntegerByteSize(dataView, offset, result.indexSize);
+				offset+=result.baseOffsetSize;
+ 			}
+			else
+				item.extents[j].extentIndex=0;
+			item.extents[j].extentOffset=getUIntegerByteSize(dataView, offset, result.offsetSize)+baseOffset;
+			offset+=result.offsetSize;
+			if (idat!=-1 && constructionMethod==1) 
+				item.extents[j].extentOffset+=fileInfo.boxes[idat].start+fileInfo.boxes[idat].dataOffset;
+			item.extents[j].extentLength=getUIntegerByteSize(dataView, offset, result.lengthSize);
+			offset+=result.lengthSize;
 		} 
- if ((version == 1) || (version == 2)) { 
- unsigned int(12) reserved = 0; 
- unsigned int(4) construction_method; 
- } 
- unsigned int(16) data_reference_index; 
- unsigned int(base_offset_size*8) base_offset; 
- unsigned int(16) extent_count; 
- for (j=0; j<extent_count; j++) { 
- if (((version == 1) || (version == 2)) && (index_size > 0)) { 
- unsigned int(index_size*8) extent_index; 
- } 
- unsigned int(offset_size*8) extent_offset; 
- unsigned int(length_size*8) extent_length; 
- } 
- }
-}*/
+		if (showDump)
+			showDump(items, divItem);
+	}
 	return items;
 }
 
