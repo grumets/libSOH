@@ -14,7 +14,7 @@ function readCOHForm(divURL, divBox, divLimit, divItem){
 async function readCOHFormAsync(divURL, divBox, divLimit, divItem){
 	var fileInfo=await readCOHBoxDumpURL(document.getElementById(divURL).value, parseInt(document.getElementById(divLimit).value), divBox, showBox);
 	if (divItem)
-		readCOHItemsDumpURL(document.getElementById(divURL).value, fileInfo, divItem, showItem);
+		fileInfo.items=readCOHItemsDumpURL(document.getElementById(divURL).value, fileInfo, divItem, showItem);
 }
 
 function printFileDataHexa(dataView, limit)
@@ -106,14 +106,20 @@ async function readCOHBoxDumpURL(url, limit, divBox, showDump) {
 	return {boxes: array, fileSize: fileSize};
 }
 
+function getIndexCOHBoxType(fileInfo, type) {
+	for (var i=0; i<fileInfo.boxes.length; i++) {
+		if (fileInfo.boxes[i].type==type)
+			return i;
+	}
+	return -1;
+}
+
+
 async function readCOHItemsDumpURL(url, fileInfo, divItem, showDump) {
 	var result, resultItem, items=[], offset, offsetItem, entryCount;
 
-	for (var i=0; i<fileInfo.boxes.length; i++) {
-		if (fileInfo.boxes[i].type=="meta/iinf")
-			break;
-	}
-	if (i==fileInfo.boxes[i].length)
+	var i=getIndexCOHBoxType(fileInfo, "meta/iinf");
+	if (i==-1)
 		return;
 
 	//Reading iinf as a FullBox 
@@ -144,18 +150,15 @@ async function readCOHItemsDumpURL(url, fileInfo, divItem, showDump) {
 				offset+=2;
 				items[i].itemProtectionIndex=dataView.getUint16(offset);
 				offset+=2;
-				items[i].itemName=getCUHString(dataView, offset, offsetItem+resultItem.size)
-				offset+=items[i].itemName.length;
-				if (offset<offsetItem+resultItem.size)
-					offset++;
- 				items[i].contentType=getCUHString(dataView, offset, offsetItem+resultItem.size); 
-				offset+=items[i].contentType.length;
-				if (offset<offsetItem+resultItem.size)
-					offset++;
-				items[i].contentencoding=getCUHString(dataView, offset, offsetItem+resultItem.size);  
-				offset+=items[i].contentencoding.length;
-				if (offset<offsetItem+resultItem.size)
-					offset++;
+
+				items[i].itemName=getCOHString(dataView, offset, offsetItem+resultItem.size);
+				offset+=getCOHStringSize(items[i].itemName, offset, offsetItem+resultItem.size);
+
+ 				items[i].contentType=getCOHString(dataView, offset, offsetItem+resultItem.size); 
+				offset+=getCOHStringSize(items[i].contentType, offset, offsetItem+resultItem.size);
+
+				items[i].contentEncoding=getCOHString(dataView, offset, offsetItem+resultItem.size);  
+				offset+=getCOHStringSize(items[i].contentEncoding, offset, offsetItem+resultItem.size);
 			} else {
 				if (resultItem.version == 2) { 
 					items[i].itemId=dataView.getUint16(offset);
@@ -168,30 +171,80 @@ async function readCOHItemsDumpURL(url, fileInfo, divItem, showDump) {
 				offset+=2;
 				items[i].itemType=getBoxType(dataView, offset);
 				offset+=4;
-				items[i].itemName=getCUHString(dataView, offset, offsetItem+resultItem.size)
-				offset+=items[i].itemName.length;
-				if (offset<offsetItem+resultItem.size)
-					offset++;
+
+				items[i].itemName=getCOHString(dataView, offset, offsetItem+resultItem.size)
+				offset+=getCOHStringSize(items[i].itemName, offset, offsetItem+resultItem.size);;
 				if (items[i].itemType=='mime') { 
-	 				items[i].contentType=getCUHString(dataView, offset, offsetItem+resultItem.size); 
-					offset+=items[i].contentType.length;
-					if (offset<offsetItem+resultItem.size)
-						offset++;
-					items[i].contentencoding=getCUHString(dataView, offset, offsetItem+resultItem.size);  
-					offset+=items[i].contentencoding.length;
-					if (offset<offsetItem+resultItem.size)
-						offset++; 
+	 				items[i].contentType=getCOHString(dataView, offset, offsetItem+resultItem.size); 
+					offset+=getCOHStringSize(items[i].contentType, offset, offsetItem+resultItem.size);
+
+					items[i].contentEncoding=getCOHString(dataView, offset, offsetItem+resultItem.size);  
+					offset+=getCOHStringSize(items[i].contentEncoding, offset, offsetItem+resultItem.size);
  				} else if (items[i].itemType == 'uri ') {
-					items[i].itemUriType=getCUHString(dataView, offset, offsetItem+resultItem.size);
-					offset+=items[i].itemUriType.length; 
-					if (offset<offsetItem+resultItem.size)
-						offset++;
+					items[i].itemUriType=getCOHString(dataView, offset, offsetItem+resultItem.size);
+					offset+=getCOHStringSize(items[i].itemUriType, offset, offsetItem+resultItem.size);
 				}
  			}
   		}
 		if (showDump)
 			showDump(items, divItem);
 	}
+
+	/*
+
+	var i=getIndexCOHBoxType(fileInfo, "meta/iloc");
+	if (i==-1)
+		return;
+
+	//Reading iloc as a FullBox 
+	var start=fileInfo.boxes[i].start;
+	result=await readCOHBoxURL(url, start, fileInfo.fileSize);
+	var dvOffset=result.type=="uuid" ? 24 : 8;
+	var dataView=result.dataView;
+	result.version=getFullBoxVersion(dataView, 0);
+	result.flags=getFullBoxFlags(dataView, 1);
+
+	result.offsetSize=dataView.getUint8(4)>>4;
+	result.lengthSize=dataView.getUint8(4)&0x0F;
+	result.baseOffsetSize=dataView.getUint8(5)>>4; 
+	if (result.version == 1 || result.version == 2)
+		result.indexSize=dataView.getUint8(5)&0x0F; 
+	//else
+	//	result.reserved=dataView.getUint8(5)&0x0F;
+
+	if (result.version < 2) {
+		result.itemCount=dataView.getUint16(6);
+		offset=8;
+	}
+	else if (result.version == 2) { 
+ 		result.itemCount=dataView.getUint32(6);
+		offset=10;
+	}
+	var itemId;
+	for (i=0; i<result.itemCount; i++) { 
+		if (result.version < 2) { 
+			itemId=dataView.getUint16(offset);
+			offset+=2;
+		} else if (result.version == 2) { 
+			itemId=dataView.getUint32(offset);
+			offset+=4;
+		} 
+ if ((version == 1) || (version == 2)) { 
+ unsigned int(12) reserved = 0; 
+ unsigned int(4) construction_method; 
+ } 
+ unsigned int(16) data_reference_index; 
+ unsigned int(base_offset_size*8) base_offset; 
+ unsigned int(16) extent_count; 
+ for (j=0; j<extent_count; j++) { 
+ if (((version == 1) || (version == 2)) && (index_size > 0)) { 
+ unsigned int(index_size*8) extent_index; 
+ } 
+ unsigned int(offset_size*8) extent_offset; 
+ unsigned int(length_size*8) extent_length; 
+ } 
+ }
+}*/
 	return items;
 }
 
@@ -233,7 +286,7 @@ function getBoxType(dataView, offset){
 		String.fromCharCode(dataView.getUint8(offset+2))+String.fromCharCode(dataView.getUint8(offset+3));
 }
 
-function getCUHString(dataView, offset, size){
+function getCOHString(dataView, offset, size){
 	var s="";
 	for (var i=0; offset<size; i++) {
 		if (dataView.getUint8(offset)==0)
@@ -242,6 +295,13 @@ function getCUHString(dataView, offset, size){
 		offset++;
 	}
 	return s;
+}
+
+function getCOHStringSize(s, offset, size){
+	var l=s.length;
+	if (offset<size)
+		l++;
+	return l;
 }
 
 function getBoxUUIDType(dataView, offset){
