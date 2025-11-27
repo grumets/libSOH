@@ -1,1 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
 
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+	<script>
+"use strict"
+
+function readCOHForm(divURL, divBox, divLimit, divItem){
+	readCOHFormAsync(divURL, divBox, divLimit, divItem);
+	return false;
+}
+
+async function readCOHFormAsync(divURL, divBox, divLimit, divItem){
+	var fileInfo=await readCOHBoxDumpURL(document.getElementById(divURL).value, parseInt(document.getElementById(divLimit).value), divBox, showBox);
+	if (divItem)
+		readCOHItemsDumpURL(document.getElementById(divURL).value, fileInfo, divItem, showItem);
+}
+
+function printFileDataHexa(dataView, limit)
+{
+var len=dataView.byteLength, s="", h;
+
+	if (limit && len>limit) len=limit;
+	for(var i=0; i<len; i++)
+	{
+		h=dataView.getUint8(i).toString(16).toUpperCase();
+		s+=((h.length==1) ? "0"+h : h) +" ";
+	}
+	return s;
+}
+
+function printFileDataChar(dataView, limit)
+{
+var len=dataView.byteLength, s="", c;
+
+	if (limit && len>limit) len=limit;
+	for(var i=0; i<len; i++) {
+		if (dataView.getUint8(i)<32)
+			c="·";
+		else {
+			c=String.fromCharCode(dataView.getUint8(i));
+			if (c=='<')
+				c="&lt;";
+			else if (c=='&')
+				c="&amp;";
+		}
+		s+=c;
+	}
+	return s;
+}
+
+function printFileDataDeci(dataView, limit)
+{
+var len=dataView.byteLength, s="";
+
+	if (limit && len>limit) len=limit;
+	for(var i=0; i<len; i++)
+		s+=dataView.getUint8(i).toString()+" ";
+
+	return s;
+}
+
+async function showBox(array, divShow) {
+	var s="<table border=1><tr><th>Size</th><th>Type</th><th>Data (String)</th><th>Data (Number)</th><th>Data (Hex)</th></tr>";
+	for (var i=0; i<array.length; i++)
+		s+="<tr><td>" + array[i].size + "</td><td>" + array[i].type + "</td><td>" + printFileDataChar(array[i].dataView) + "</td><td>" + printFileDataDeci(array[i].dataView) + "</td><td style='font-family: monospace;'>" + printFileDataHexa(array[i].dataView) + "</td></tr>";
+	s+="</table>";
+	document.getElementById(divShow).innerHTML=s;
+}
+
+async function showItem(items, divItem) {
+	var s="<table border=1><tr><th>Id</th><th>Name</th><th>Type</th></tr>";
+	for (var i=0; i<items.length; i++)
+		s+="<tr><td>" + items[i].itemId + "</td><td>" + items[i].itemName + "</td><td>" + (items[i].itemType=='mime' ? items[i].contentType : items[i].itemType=='uri ' ? items[i].itemUriType : items[i].itemType) + "</td></tr>";
+	s+="</table>";
+	document.getElementById(divItem).innerHTML=s;
+}
+
+async function readCOHBoxDumpURL(url, limit, divBox, showDump) {
+	var start = 0, result, array=[];
+	var fileSize=await getURLSize(url);
+
+	while (result=await readCOHBoxURL(url, start, fileSize, limit)) {
+		array.push(result);
+		if (showDump)
+			showDump(array, divBox);
+		if (result.type=='meta' && result.dataView && result.dataView.getUint32(0)==0) {
+			var startBox=start + 12;
+			var endBox=result.size+start;
+			var resultBox;
+			while (resultBox=await readCOHBoxURL(url, startBox, fileSize, limit)) {
+				resultBox.type='meta'+'/'+resultBox.type;
+				array.push(resultBox);
+				if (showDump)
+					showDump(array, divBox);
+				startBox+=resultBox.size;
+				if (startBox>=endBox)
+					break;
+			};
+		}	
+		start+=result.size;
+		if (start>=fileSize)
+			break;
+	};
+	return {boxes: array, fileSize: fileSize};
+}
+
+async function readCOHItemsDumpURL(url, fileInfo, divItem, showDump) {
+	var result, resultItem, items=[], offset, offsetItem, entryCount;
+
+	for (var i=0; i<fileInfo.boxes.length; i++) {
+		if (fileInfo.boxes[i].type=="meta/iinf")
+			break;
+	}
+	if (i==fileInfo.boxes[i].length)
+		return;
+
+	//Reading iinf as a FullBox 
+	var start=fileInfo.boxes[i].start;
+	result=await readCOHBoxURL(url, start, fileInfo.fileSize);
+	var dvOffset=result.type=="uuid" ? 24 : 8;
+	var dataView=result.dataView;
+	result.version=getFullBoxVersion(dataView, 0);
+	result.flags=getFullBoxFlags(dataView, 1);
+	
+	if (result.version==0) {
+		entryCount=dataView.getUint16(4);
+		offset=6;
+	} else {
+		entryCount=dataView.getUint32(4);
+		offset=8;
+	}
+
+	var items=[];
+	for (var i=0; i<entryCount; i++) {
+		offsetItem=offset;
+		resultItem=readCOHFullBox(dataView, offset, start+dvOffset+offset, fileInfo.fileSize);
+		offset+=(resultItem.type=="uuid" ? 28 : 12);
+		items.push(resultItem);
+		if (resultItem.type=="infe") {
+			if (resultItem.version == 0 || resultItem.version == 1) { 
+				items[i].itemId=dataView.getUint16(offset);
+				offset+=2;
+				items[i].itemProtectionIndex=dataView.getUint16(offset);
+				offset+=2;
+				items[i].itemName=getCUHString(dataView, offset, offsetItem+resultItem.size)
+				offset+=items[i].itemName.length;
+				if (offset<offsetItem+resultItem.size)
+					offset++;
+ 				items[i].contentType=getCUHString(dataView, offset, offsetItem+resultItem.size); 
+				offset+=items[i].contentType.length;
+				if (offset<offsetItem+resultItem.size)
+					offset++;
+				items[i].contentencoding=getCUHString(dataView, offset, offsetItem+resultItem.size);  
+				offset+=items[i].contentencoding.length;
+				if (offset<offsetItem+resultItem.size)
+					offset++;
+			} else {
+				if (resultItem.version == 2) { 
+					items[i].itemId=dataView.getUint16(offset);
+					offset+=2;
+				} else if (resultItem.version == 3) { 
+					items[i].itemId=dataView.getUint32(offset);
+					offset+=4;
+				}
+				items[i].itemProtectionIndex=dataView.getUint16(offset);
+				offset+=2;
+				items[i].itemType=getBoxType(dataView, offset);
+				offset+=4;
+				items[i].itemName=getCUHString(dataView, offset, offsetItem+resultItem.size)
+				offset+=items[i].itemName.length;
+				if (offset<offsetItem+resultItem.size)
+					offset++;
+				if (items[i].itemType=='mime') { 
+	 				items[i].contentType=getCUHString(dataView, offset, offsetItem+resultItem.size); 
+					offset+=items[i].contentType.length;
+					if (offset<offsetItem+resultItem.size)
+						offset++;
+					items[i].contentencoding=getCUHString(dataView, offset, offsetItem+resultItem.size);  
+					offset+=items[i].contentencoding.length;
+					if (offset<offsetItem+resultItem.size)
+						offset++; 
+ 				} else if (items[i].itemType == 'uri ') {
+					items[i].itemUriType=getCUHString(dataView, offset, offsetItem+resultItem.size);
+					offset+=items[i].itemUriType.length; 
+					if (offset<offsetItem+resultItem.size)
+						offset++;
+				}
+ 			}
+  		}
+		if (showDump)
+			showDump(items, divItem);
+	}
+	return items;
+}
+
+async function getURLSize(url){
+	var response=await fetch(url, {
+		method: "HEAD"
+    	})
+	if (!response?.ok) {
+		return;
+	}
+
+	if (response.headers.get('Content-Length')==null)
+		return;
+	else 
+		return parseInt(response.headers.get('Content-Length'));
+}
+
+function getBoxSize(dataView, offset, start, fileSize){
+	var size=dataView.getUint32(offset);
+	if (size==1) {
+		alert("Size=1 not implemented");
+		return;
+	}
+	if (size==0) 
+		size=fileSize-start;
+	return size;
+}
+
+function getFullBoxVersion(dataView, offset) {
+	return dataView.getUint8(offset)
+}
+
+function getFullBoxFlags(dataView, offset) {
+	return dataView.getUint8(offset+2)+dataView.getUint8(offset+1)*256+dataView.getUint8(offset)*256*256;
+}
+
+function getBoxType(dataView, offset){
+	return String.fromCharCode(dataView.getUint8(offset))+String.fromCharCode(dataView.getUint8(offset+1))+
+		String.fromCharCode(dataView.getUint8(offset+2))+String.fromCharCode(dataView.getUint8(offset+3));
+}
+
+function getCUHString(dataView, offset, size){
+	var s="";
+	for (var i=0; offset<size; i++) {
+		if (dataView.getUint8(offset)==0)
+			return s;
+		s+=String.fromCharCode(dataView.getUint8(offset));
+		offset++;
+	}
+	return s;
+}
+
+function getBoxUUIDType(dataView, offset){
+	var type="";
+	for (var i=0; i<16; i++) 
+		type+=String.fromCharCode(dataView.getUint8(offset+i));
+	return type;
+}
+
+function readCOHBox(dataView, offset, start, fileSize){
+	var size=getBoxSize(dataView, offset, start, fileSize);
+	var type=getBoxType(dataView, offset+4);
+	if (type=="uuid")
+		type=getBoxUUIDType(dataView, offset+8);
+	return {start: start, size: size, type: type};
+}
+
+function readCOHFullBox(dataView, offset, start, fileSize){
+	var result=readCOHBox(dataView, offset, start, fileSize);
+	offset+=(result.type=="uuid" ? 24 : 8);
+	result.version=getFullBoxVersion(dataView, offset);
+	result.flags=getFullBoxFlags(dataView, offset+1);
+	return result;
+}
+
+async function readCOHBoxURL(url, start, fileSize, limit){
+	var response=await fetch(url, {
+        	headers: {
+        	    'range': 'bytes='+start+'-'+(start+3)
+	        },
+    	})
+	if (!response?.ok) {
+		return;
+	}
+        var buffer=await response.arrayBuffer();
+	var dataView = new DataView(buffer);
+
+	var size = getBoxSize(dataView, 0, start, fileSize);
+
+	response=await fetch(url, {
+        	headers: {
+        	    'range': 'bytes='+(start+4)+'-'+(limit && size>limit ? start+limit-1 : start+size-1)
+	        },
+    	})
+	if (!response?.ok) {
+		return;
+	}
+        buffer=await response.arrayBuffer();
+	dataView = new DataView(buffer, 0, 4);
+	var type=getBoxType(dataView, 0);
+
+	if (type=="uuid") {
+		dataView = new DataView(buffer, 4, 16);
+		type=getBoxUUIDType(dataView, 0);
+	}
+	return {start: start, size: size, type: type, dataView: new DataView(buffer, type=="uuid" ? 20 : 4)};
+}
+
+	</script>
+</head>
+
+<body>
+	<form>
+	HEIF URL: <input id="heifURL" value="tb21_4x4_grid.heif"/>
+	<button onClick='return readCOHForm("heifURL", "heifBox", "limit", "heifItem");'>read</button>
+	Limit length: <input id="limit" value="20"/>
+	<div id="heifBox"></div>
+	<div id="heifItem"></div>
+	</form>
+</body>
