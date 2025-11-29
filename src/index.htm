@@ -188,8 +188,8 @@ async function readSOHItemsDumpURL(url, fileInfo, divItem, showDump) {
 	var items=[];
 	for (var i=0; i<entryCount; i++) {
 		offsetItem=offset;
-		resultItem=readSOHFullBox(dataView, offset, start+dvOffset+offset, fileInfo.fileSize);
-		offset+=(resultItem.type=="uuid" ? 28 : 12);
+		resultItem=readSOHFullBox(dataView, offset, start, fileInfo.fileSize);
+		offset+=resultItem.dataOffset;
 		items.push(resultItem);
 		if (resultItem.type=="infe") {
 			if (resultItem.version == 0 || resultItem.version == 1) { 
@@ -241,7 +241,7 @@ async function readSOHItemsDumpURL(url, fileInfo, divItem, showDump) {
 
 	var i=getIndexSOHBoxType(fileInfo.boxes, "meta/iloc");  
 	if (i==-1)
-		return;
+		return items;
 
 	//Reading iloc as a FullBox 
 	var start=fileInfo.boxes[i].start;
@@ -315,6 +315,71 @@ async function readSOHItemsDumpURL(url, fileInfo, divItem, showDump) {
 		if (showDump)
 			showDump(items, divItem);
 	}
+	
+	var i=getIndexSOHBoxType(fileInfo.boxes, "meta/iprp");
+	if (i==-1)
+		return items;
+	//Reading iloc as a FullBox 
+	var start=fileInfo.boxes[i].start;
+	result=await readSOHBoxURL(url, start, fileInfo.fileSize);
+	var dvOffset=result.dataOffset
+	var dataView=result.dataView;
+
+	//read 'ipco'
+	result=readSOHBox(dataView, 0, start, fileInfo.fileSize);
+	offset=result.dataOffset;
+	if (result.type!='ipco') {
+		console.log("Unexpected section in 'meta/iprp':" + result.type);
+		return items;
+	}
+
+	var props=[], prop;
+	while (result.size>offset){
+		prop=readSOHBox(dataView, offset, start, fileInfo.fileSize);
+		props.push(prop);
+		//Details of reading each individual box
+		offset+=prop.size;
+	}
+	result=readSOHFullBox(dataView, offset, start, fileInfo.fileSize);
+	offset+=result.dataOffset;
+	if (result.type!='ipma') {
+		console.log("Unexpected section in 'meta/iprp':" + result.type);
+		return items;
+	}
+	entryCount=dataView.getUint32(offset);
+	offset+=4;
+	var associationCount, propIndex;
+	for(var i=0; i<entryCount; i++) { 
+		if (result.version < 1) {
+			itemId=dataView.getUint16(offset);
+			offset+=2;
+		}
+         	else 
+		{
+			itemId=dataView.getUint32(offset);
+			offset+=4;
+		}
+
+		var z=getIndexSOHItemID(items, itemId);
+		if (z==-1)
+			continue;
+		item=items[z];
+		var associationCount=dataView.getUint8(offset);
+		offset+=1;
+		item.associations=[];
+		for (j=0; j<associationCount; j++) {
+			item.associations.push({});
+			if (dataView.getUint8(offset)&0x80)
+				item.associations[j].essential=true; 
+			if (result.flags & 1) {
+				propIndex=dataView.getUint16(offset)&0x7FFF;
+				offset+=2;
+			} else {
+				propIndex=dataView.getUint8(offset)&0x7F;
+				offset+=1;
+			}
+		}
+	} 
 	return items;
 }
 
@@ -346,7 +411,7 @@ async function getURLSize(url){
 function getBoxSize(dataView, offset, start, fileSize){
 	var size=dataView.getUint32(offset);
 	/*if (size==1) {
-		alert("Size=1 not implemented");
+		console.log("Size=1 not implemented");
 		return;
 	}*/
 	if (size==0) 
@@ -357,7 +422,7 @@ function getBoxSize(dataView, offset, start, fileSize){
 async function getBoxLargeSizeURL(url, begin, end, fileSize){
 			
 	if (fileSize - begin + 1 < 8) {
-		console.debug("Not enough file size to parse the largesize of the box");
+		console.log("Not enough file size to parse the largesize of the box");
 		return;
 	}	
 	var buffer=await getURLRange(url, begin, end);
@@ -408,26 +473,36 @@ function getBoxUUIDType(dataView, offset){
 	return type;
 }
 
+//result.dataOffset is number of bytes between the start the box and the start of the data (the size of the headers of a box; not the offset for the start of dataView)
 function readSOHBox(dataView, offset, start, fileSize){
+	var dataOffset=offset;
 	var size=getBoxSize(dataView, offset, start, fileSize);
 	var type=getBoxType(dataView, offset+4);
-	if (type=="uuid")
-		type=getBoxUUIDType(dataView, offset+8);
-	return {start: start, size: size, type: type};
+	offset+=8; 
+	if (size==1) {
+		size=dataView.getUint64(offset+8)
+		offset+=8;
+	}
+	if (type=="uuid") {
+		type=getBoxUUIDType(dataView, offset);
+		offset+=16;
+	}
+	return {start: start, size: size, type: type, dataOffset: offset-dataOffset};
 }
 
+//result.dataOffset is number of bytes between the start the full box and the start of the data (the size of the headers of a full box; not the offset for the start of dataView)
 function readSOHFullBox(dataView, offset, start, fileSize){
 	var result=readSOHBox(dataView, offset, start, fileSize);
-	offset+=(result.type=="uuid" ? 24 : 8);
-	result.version=getFullBoxVersion(dataView, offset);
-	result.flags=getFullBoxFlags(dataView, offset+1);
+	result.version=getFullBoxVersion(dataView, offset+result.dataOffset);
+	result.flags=getFullBoxFlags(dataView, offset+result.dataOffset+1);
+	result.dataOffset+=4;
 	return result;
 }
 
 // if limit==-1 not content read
 async function readSOHBoxURL(url, start, fileSize, limit){	
 	if (fileSize - start + 1 < 8) {
-		console.debug("Not enough file size to parse the type and size of the box");
+		console.log("Not enough file size to parse the type and size of the box");
 		return;
 	}	
 	var begin=start, end=begin+7, dataOffset=8;	
@@ -439,9 +514,18 @@ async function readSOHBoxURL(url, start, fileSize, limit){
 		return;
 		
 	// size
-	var size = getBoxSize(dataView, 0, begin, fileSize);	
+	var size = getBoxSize(dataView, 0, begin, fileSize);
 	// boxtype
-	var type=getBoxType(dataView, 4);	
+	var type=getBoxType(dataView, 4);
+		
+	if (size==1) {		
+		// the size is a largesize
+		begin=end+1;
+		end=begin+7;
+		var size = getBoxLargeSizeURL(url, begin, end, fileSize);		
+		dataOffset+=8;		
+	}	
+
 	if (type=="uuid") {
 		begin=end+1;
 		end=begin+15;
@@ -452,13 +536,6 @@ async function readSOHBoxURL(url, start, fileSize, limit){
 		type=getBoxUUIDType(dataView, 0);
 		dataOffset+=16;		
 	}
-	if (size==1) {		
-		// the size is a largesize
-		begin=end+1;
-		end=begin+7;
-		var size = getBoxLargeSizeURL(url, begin, end, fileSize);		
-		dataOffset+=8;		
-	}	
 		
 	// content
 	if(limit && limit==-1){
