@@ -25,8 +25,8 @@ function parseSOHFileTypeBox(box)
 	if(!box.dataView)
 		return;
 			
-	box.major_brand=box.dataView.getUint32(0);		
-	box.minor_version=box.dataView.getUint32(4);		
+	box.major_brand=box.dataView.getUint32(0);
+	box.minor_version=box.dataView.getUint32(4);
 	var bytesToParse=box.size-16; /*4:size; 4: type; 4 major_brand; 4: minor_version*/
 	if(bytesToParse>=8)
 	{
@@ -95,7 +95,7 @@ async function showBox(array, divShow) {
 }
 
 async function showItem(items, divItem) {
-	var s="<table border=1><tr><th>Id</th><th>Name</th><th>Type</th><th>Byte ranges</th></tr>";
+	var s="<table border=1><tr><th>Id</th><th>Name</th><th>Type</th><th>Byte ranges</th><th>Witdh & height</th><th>Bits per channel</th><th>UUID</th></tr>";
 	for (var i=0; i<items.length; i++) {
 		s+="<tr><td>" + items[i].itemId + "</td><td>" + items[i].itemName + "</td><td>" + (items[i].itemType=='mime' ? items[i].contentType : items[i].itemType=='uri ' ? items[i].itemUriType : items[i].itemType) + "</td><td>";
 		if (items[i].extents) {
@@ -103,6 +103,23 @@ async function showItem(items, divItem) {
 				s+="[" + items[i].extents[j].extentOffset + "-" + (items[i].extents[j].extentOffset+items[i].extents[j].extentLength-1) + "]";
 			}
 		}
+		s+="</td><td>";
+		if (typeof items[i].imageWidth !== "undefined" && typeof items[i].imageHeight !== "undefined") {
+			s+=items[i].imageWidth + ", " + items[i].imageHeight;
+		}
+		s+="</td><td>";
+		if (items[i].bitsPerChannels) {
+			s+="[";
+			for (var j=0; j<items[i].bitsPerChannels.length; j++) {
+				s+=items[i].bitsPerChannels[j];
+				if (j+1<items[i].bitsPerChannels.length)
+					s+=",";
+			}
+			s+="]";
+		}
+		s+="</td><td>";
+		if (items[i].uuid)
+			s+=items[i].uuid;
 		s+="</td></tr>";
 	}
 	s+="</table>";
@@ -162,6 +179,36 @@ function getUIntegerByteSize(dataView, offset, byteSize) {
 	return 0;
 }
 
+function readSOHIspe(dataView, offset, start, fileSize) {
+	var result=readSOHFullBox(dataView, offset, start, fileSize);
+	offset+=result.dataOffset;
+	result.imageWidth=dataView.getUint32(offset);
+	result.imageHeight=dataView.getUint32(offset+4);
+	result.dataOffset+=8;
+	return result;
+}
+
+function readSOHPixi(dataView, offset, start, fileSize) {
+	var result=readSOHFullBox(dataView, offset, start, fileSize);
+	offset+=result.dataOffset;
+	var numChannels=dataView.getUint8(offset);
+	offset++;
+	result.bitsPerChannels=[];
+	for (var i=0; i<numChannels; i++)
+		result.bitsPerChannels.push(dataView.getUint8(offset+i)); 
+	result.dataOffset+=1+numChannels;
+	return result;
+}
+
+function copyPropertiesIpcoBox(item, prop) {
+	var propArray=Object.keys(prop);
+	for (var i=0; i<propArray.length; i++){
+		if (propArray[i]=="size" || propArray[i]=="type" || propArray[i]=="dataOffset" || propArray[i]=="version" || propArray[i]=="flags")
+			continue;
+		item[propArray[i]]=prop[propArray[i]];
+	}
+}
+
 async function readSOHItemsDumpURL(url, fileInfo, divItem, showDump) {
 	var result, resultItem, items=[], offset, offsetItem, entryCount;
 
@@ -192,7 +239,7 @@ async function readSOHItemsDumpURL(url, fileInfo, divItem, showDump) {
 		offset+=resultItem.dataOffset;
 		items.push(resultItem);
 		if (resultItem.type=="infe") {
-			if (resultItem.version == 0 || resultItem.version == 1) { 
+			if (resultItem.version == 0 || resultItem.version == 1) {
 				items[i].itemId=dataView.getUint16(offset);
 				offset+=2;
 				items[i].itemProtectionIndex=dataView.getUint16(offset);
@@ -201,10 +248,10 @@ async function readSOHItemsDumpURL(url, fileInfo, divItem, showDump) {
 				items[i].itemName=getSOHString(dataView, offset, offsetItem+resultItem.size);
 				offset+=getSOHStringSize(items[i].itemName, offset, offsetItem+resultItem.size);
 
- 				items[i].contentType=getSOHString(dataView, offset, offsetItem+resultItem.size); 
+ 				items[i].contentType=getSOHString(dataView, offset, offsetItem+resultItem.size);
 				offset+=getSOHStringSize(items[i].contentType, offset, offsetItem+resultItem.size);
 
-				items[i].contentEncoding=getSOHString(dataView, offset, offsetItem+resultItem.size);  
+				items[i].contentEncoding=getSOHString(dataView, offset, offsetItem+resultItem.size);
 				offset+=getSOHStringSize(items[i].contentEncoding, offset, offsetItem+resultItem.size);
 			} else {
 				if (resultItem.version == 2) { 
@@ -225,7 +272,7 @@ async function readSOHItemsDumpURL(url, fileInfo, divItem, showDump) {
 	 				items[i].contentType=getSOHString(dataView, offset, offsetItem+resultItem.size); 
 					offset+=getSOHStringSize(items[i].contentType, offset, offsetItem+resultItem.size);
 
-					items[i].contentEncoding=getSOHString(dataView, offset, offsetItem+resultItem.size);  
+					items[i].contentEncoding=getSOHString(dataView, offset, offsetItem+resultItem.size);
 					offset+=getSOHStringSize(items[i].contentEncoding, offset, offsetItem+resultItem.size);
  				} else if (items[i].itemType == 'uri ') {
 					items[i].itemUriType=getSOHString(dataView, offset, offsetItem+resultItem.size);
@@ -239,7 +286,7 @@ async function readSOHItemsDumpURL(url, fileInfo, divItem, showDump) {
 
 	var idat=getIndexSOHBoxType(fileInfo.boxes, "meta/idat");  //in case constructionMethod==1;
 
-	var i=getIndexSOHBoxType(fileInfo.boxes, "meta/iloc");  
+	var i=getIndexSOHBoxType(fileInfo.boxes, "meta/iloc");
 	if (i==-1)
 		return items;
 
@@ -336,8 +383,13 @@ async function readSOHItemsDumpURL(url, fileInfo, divItem, showDump) {
 	var props=[], prop;
 	while (result.size>offset){
 		prop=readSOHBox(dataView, offset, start, fileInfo.fileSize);
-		props.push(prop);
 		//Details of reading each individual box
+		if (prop.type=="ispe")
+			prop=readSOHIspe(dataView, offset, start, fileInfo.fileSize);
+		else if (prop.type=="pixi")
+			prop=readSOHPixi(dataView, offset, start, fileInfo.fileSize);
+
+		props.push(prop);
 		offset+=prop.size;
 	}
 	result=readSOHFullBox(dataView, offset, start, fileInfo.fileSize);
@@ -378,7 +430,17 @@ async function readSOHItemsDumpURL(url, fileInfo, divItem, showDump) {
 				propIndex=dataView.getUint8(offset)&0x7F;
 				offset+=1;
 			}
+			propIndex--;
+			if (propIndex<props.length) {
+				item.associations[j].type=props[propIndex].type;
+				if (props[propIndex].type=="ispe" || props[propIndex].type=="pixi") {
+					copyPropertiesIpcoBox(item, props[propIndex]);
+				} else if (props[propIndex].type.length>4)
+					item.uuid=props[propIndex].type;
+			}
 		}
+		if (showDump)
+			showDump(items, divItem);
 	} 
 	return items;
 }
@@ -431,7 +493,7 @@ async function getBoxLargeSizeURL(url, begin, end, fileSize){
 	var dataView = new DataView(buffer);
 	if(!dataView)
 		return;	
-	var large_size=dataView.getUint64(0);	
+	var large_size=dataView.getUint64(0);
 	return large_size;	
 }
 
@@ -468,7 +530,7 @@ function getSOHStringSize(s, offset, size){
 
 function getBoxUUIDType(dataView, offset){
 	var type="";
-	for (var i=0; i<16; i++) 
+	for (var i=0; i<16; i++)
 		type+=String.fromCharCode(dataView.getUint8(offset+i));
 	return type;
 }
@@ -522,7 +584,7 @@ async function readSOHBoxURL(url, start, fileSize, limit){
 		// the size is a largesize
 		begin=end+1;
 		end=begin+7;
-		var size = getBoxLargeSizeURL(url, begin, end, fileSize);		
+		var size = getBoxLargeSizeURL(url, begin, end, fileSize);
 		dataOffset+=8;		
 	}	
 
@@ -543,7 +605,7 @@ async function readSOHBoxURL(url, start, fileSize, limit){
 	}
 	else{
 		begin=start+dataOffset;
-		end=(limit && (size-dataOffset)>limit) ? begin+limit-1 : start+size-1;	
+		end=(limit && (size-dataOffset)>limit) ? begin+limit-1 : start+size-1;
 		buffer=await getURLRange(url, begin, end);
 		if(!buffer)
 			return;
