@@ -1,0 +1,563 @@
+"use strict"
+
+//This function was not been used yet.
+function parseSOHFileTypeBox(box)
+{
+	if(!box)
+		return;
+		
+	if(!box.dataView)
+		return;
+			
+	box.major_brand=box.dataView.getUint32(0);
+	box.minor_version=box.dataView.getUint32(4);
+	var bytesToParse=box.size-16; /*4:size; 4: type; 4 major_brand; 4: minor_version*/
+	if(bytesToParse>=8)
+	{
+		start=7+1;
+		box.compatible_brands=[];
+		for(var i=0; i<bytesToParse/8; i++)
+		{
+			box.compatible_brands.push(box.dataView.getUint32(start));
+			start=+8;
+		}
+	}
+	return box;
+}
+
+async function readSOHBoxDumpURL(url, limit, divIdBox, showDump) {
+	var start = 0, result, array=[];
+	var fileSize=await getURLSize(url);
+
+	while (result=await readSOHBoxURL(url, start, fileSize, limit)) {
+		array.push(result);
+		if (showDump)
+			showDump(array, divIdBox);
+		if (result.type=='meta' && result.dataView && result.dataView.getUint32(0)==0) {
+			var startBox=start + 12;
+			var endBox=result.size+start;
+			var resultBox;
+			while (resultBox=await readSOHBoxURL(url, startBox, fileSize, limit)) {
+				resultBox.type='meta'+'/'+resultBox.type;
+				array.push(resultBox);
+				if (showDump)
+					showDump(array, divIdBox);
+				startBox+=resultBox.size;
+				if (startBox>=endBox)
+					break;
+			};
+		}	
+		start+=result.size;
+		if (start>=fileSize)
+			break;
+	};
+	return {boxes: array, fileSize: fileSize};
+}
+
+function getIndexSOHBoxType(boxes, type) {
+	for (var i=0; i<boxes.length; i++) {
+		if (boxes[i].type==type)
+			return i;
+	}
+	return -1;
+}
+
+function getIndexSOHItemID(items, itemId) {
+	for (var i=0; i<items.length; i++) {
+		if (items[i].itemId==itemId)
+			return i;
+	}
+	return -1;
+}
+
+function getUIntegerByteSize(dataView, offset, byteSize) {
+	if (byteSize==4)
+		return dataView.getUint32(offset);
+	if (byteSize==8)
+		return dataView.getUint64(offset);
+	return 0;
+}
+
+function readSOHIspe(dataView, offset, start, fileSize) {
+	var result=readSOHFullBox(dataView, offset, start, fileSize);
+	offset+=result.dataOffset;
+	result.imageWidth=dataView.getUint32(offset);
+	result.imageHeight=dataView.getUint32(offset+4);
+	result.dataOffset+=8;
+	return result;
+}
+
+function readSOHPixi(dataView, offset, start, fileSize) {
+	var result=readSOHFullBox(dataView, offset, start, fileSize);
+	offset+=result.dataOffset;
+	var numChannels=dataView.getUint8(offset);
+	offset++;
+	result.bitsPerChannels=[];
+	for (var i=0; i<numChannels; i++)
+		result.bitsPerChannels.push(dataView.getUint8(offset+i)); 
+	result.dataOffset+=1+numChannels;
+	return result;
+}
+
+function copyPropertiesIpcoBox(item, prop) {
+	var propArray=Object.keys(prop);
+	for (var i=0; i<propArray.length; i++){
+		if (propArray[i]=="size" || propArray[i]=="type" || propArray[i]=="dataOffset" || propArray[i]=="version" || propArray[i]=="flags")
+			continue;
+		item[propArray[i]]=prop[propArray[i]];
+	}
+}
+
+async function readSOHItemsDumpURL(url, sidecarUrl, fileInfo, divIdItem, showDump) {
+	var result, resultItem, items=[], offset, offsetItem, entryCount;
+
+	var i=getIndexSOHBoxType(fileInfo.boxes, "meta/iinf");
+	if (i==-1)
+		return;
+
+	//Reading iinf as a FullBox 
+	var start=fileInfo.boxes[i].start;
+	result=await readSOHBoxURL(url, start, fileInfo.fileSize);
+	var dvOffset=result.dataOffset;
+	var dataView=result.dataView;
+	result.version=getFullBoxVersion(dataView, 0);
+	result.flags=getFullBoxFlags(dataView, 1);
+	
+	if (result.version==0) {
+		entryCount=dataView.getUint16(4);
+		offset=6;
+	} else {
+		entryCount=dataView.getUint32(4);
+		offset=8;
+	}
+
+	var items=[];
+	for (var i=0; i<entryCount; i++) {
+		offsetItem=offset;
+		resultItem=readSOHFullBox(dataView, offset, start, fileInfo.fileSize);
+		offset+=resultItem.dataOffset;
+		items.push(resultItem);
+		if (resultItem.type=="infe") {
+			if (resultItem.version == 0 || resultItem.version == 1) {
+				items[i].itemId=dataView.getUint16(offset);
+				offset+=2;
+				items[i].itemProtectionIndex=dataView.getUint16(offset);
+				offset+=2;
+
+				items[i].itemName=getSOHString(dataView, offset, offsetItem+resultItem.size);
+				offset+=getSOHStringSize(items[i].itemName, offset, offsetItem+resultItem.size);
+
+ 				items[i].contentType=getSOHString(dataView, offset, offsetItem+resultItem.size);
+				offset+=getSOHStringSize(items[i].contentType, offset, offsetItem+resultItem.size);
+
+				items[i].contentEncoding=getSOHString(dataView, offset, offsetItem+resultItem.size);
+				offset+=getSOHStringSize(items[i].contentEncoding, offset, offsetItem+resultItem.size);
+			} else {
+				if (resultItem.version == 2) { 
+					items[i].itemId=dataView.getUint16(offset);
+					offset+=2;
+				} else if (resultItem.version == 3) { 
+					items[i].itemId=dataView.getUint32(offset);
+					offset+=4;
+				}
+				items[i].itemProtectionIndex=dataView.getUint16(offset);
+				offset+=2;
+				items[i].itemType=getBoxType(dataView, offset);
+				offset+=4;
+
+				items[i].itemName=getSOHString(dataView, offset, offsetItem+resultItem.size)
+				offset+=getSOHStringSize(items[i].itemName, offset, offsetItem+resultItem.size);;
+				if (items[i].itemType=='mime') { 
+	 				items[i].contentType=getSOHString(dataView, offset, offsetItem+resultItem.size); 
+					offset+=getSOHStringSize(items[i].contentType, offset, offsetItem+resultItem.size);
+
+					items[i].contentEncoding=getSOHString(dataView, offset, offsetItem+resultItem.size);
+					offset+=getSOHStringSize(items[i].contentEncoding, offset, offsetItem+resultItem.size);
+ 				} else if (items[i].itemType == 'uri ') {
+					items[i].itemUriType=getSOHString(dataView, offset, offsetItem+resultItem.size);
+					offset+=getSOHStringSize(items[i].itemUriType, offset, offsetItem+resultItem.size);
+				}
+ 			}
+  		}
+		if (showDump)
+			showDump(items, divIdItem);
+	}
+
+	var idat=getIndexSOHBoxType(fileInfo.boxes, "meta/idat");  //in case constructionMethod==1;
+
+	var i=getIndexSOHBoxType(fileInfo.boxes, "meta/iloc");
+	if (i==-1)
+		return items;
+
+	//Reading iloc as a FullBox 
+	var start=fileInfo.boxes[i].start;
+	result=await readSOHBoxURL(url, start, fileInfo.fileSize);
+	var dvOffset=result.dataOffset
+	var dataView=result.dataView;
+	result.version=getFullBoxVersion(dataView, 0);
+	result.flags=getFullBoxFlags(dataView, 1);
+
+	result.offsetSize=dataView.getUint8(4)>>4;
+	result.lengthSize=dataView.getUint8(4)&0x0F;
+	result.baseOffsetSize=dataView.getUint8(5)>>4; 
+	if (result.version == 1 || result.version == 2)
+		result.indexSize=dataView.getUint8(5)&0x0F; 
+	else {
+		result.indexSize=0;
+	//	result.reserved=dataView.getUint8(5)&0x0F;
+	}
+
+	if (result.version < 2) {
+		result.itemCount=dataView.getUint16(6);
+		offset=8;
+	}
+	else if (result.version == 2) { 
+ 		result.itemCount=dataView.getUint32(6);
+		offset=10;
+	}
+	var itemId, item, constructionMethod;
+	for (i=0; i<result.itemCount; i++) { 
+		if (result.version < 2) { 
+			itemId=dataView.getUint16(offset);
+			offset+=2;
+		} else if (result.version == 2) { 
+			itemId=dataView.getUint32(offset);
+			offset+=4;
+		}
+
+		var z=getIndexSOHItemID(items, itemId);
+		if (z==-1)
+			continue;
+		item=items[z];
+		if (result.version == 1 || result.version == 2) { 
+			//unsigned int(12) reserved = 0; 
+			constructionMethod=dataView.getUint16(offset)&0x0F;
+			offset+=2;
+		}
+		else
+			constructionMethod=0;
+		//data_reference_index=dataView.getUint16(offset)  //the origin of the offset is the beginning of the file identified by the data_reference_index
+		offset+=2;
+		var baseOffset=getUIntegerByteSize(dataView, offset, result.baseOffsetSize);
+		offset+=result.baseOffsetSize;
+		var extentCount=dataView.getUint16(offset);
+		offset+=2;
+		item.extents=[];
+		for (var j=0; j<extentCount; j++) {
+			item.extents.push({});
+			if ((result.version == 1 || result.version == 2) && result.indexSize > 0) { 
+				item.extents[j].extentIndex=getUIntegerByteSize(dataView, offset, result.indexSize);
+				offset+=result.baseOffsetSize;
+ 			}
+			else
+				item.extents[j].extentIndex=0;
+			item.extents[j].extentOffset=getUIntegerByteSize(dataView, offset, result.offsetSize)+baseOffset;
+			offset+=result.offsetSize;
+			if (idat!=-1 && constructionMethod==1) 
+				item.extents[j].extentOffset+=fileInfo.boxes[idat].start+fileInfo.boxes[idat].dataOffset;
+			item.extents[j].extentLength=getUIntegerByteSize(dataView, offset, result.lengthSize);
+			offset+=result.lengthSize;
+		} 
+		if (showDump)
+			showDump(items, divIdItem);
+	}
+	
+	var i=getIndexSOHBoxType(fileInfo.boxes, "meta/iprp");
+	if (i==-1)
+		return items;
+	//Reading iloc as a FullBox 
+	var start=fileInfo.boxes[i].start;
+	result=await readSOHBoxURL(url, start, fileInfo.fileSize);
+	var dvOffset=result.dataOffset
+	var dataView=result.dataView;
+
+	//read 'ipco'
+	result=readSOHBox(dataView, 0, start, fileInfo.fileSize);
+	offset=result.dataOffset;
+	if (result.type!='ipco') {
+		console.log("Unexpected section in 'meta/iprp':" + result.type);
+		return items;
+	}
+
+	var props=[], prop;
+	while (result.size>offset){
+		prop=readSOHBox(dataView, offset, start, fileInfo.fileSize);
+		//Details of reading each individual box
+		if (prop.type=="ispe")
+			prop=readSOHIspe(dataView, offset, start, fileInfo.fileSize);
+		else if (prop.type=="pixi")
+			prop=readSOHPixi(dataView, offset, start, fileInfo.fileSize);
+		else if (prop.type=="uuid") 
+			prop.contentId=getSOHString(dataView, offset+prop.dataOffset, offset+prop.size);
+
+		props.push(prop);
+		offset+=prop.size;
+	}
+	result=readSOHFullBox(dataView, offset, start, fileInfo.fileSize);
+	offset+=result.dataOffset;
+	if (result.type!='ipma') {
+		console.log("Unexpected section in 'meta/iprp':" + result.type);
+		return items;
+	}
+	entryCount=dataView.getUint32(offset);
+	offset+=4;
+	var associationCount, propIndex;
+	for(var i=0; i<entryCount; i++) { 
+		if (result.version < 1) {
+			itemId=dataView.getUint16(offset);
+			offset+=2;
+		}
+         	else 
+		{
+			itemId=dataView.getUint32(offset);
+			offset+=4;
+		}
+
+		var z=getIndexSOHItemID(items, itemId);
+		if (z==-1)
+			continue;
+		item=items[z];
+		var associationCount=dataView.getUint8(offset);
+		offset+=1;
+		item.associations=[];
+		for (j=0; j<associationCount; j++) {
+			item.associations.push({});
+			if (dataView.getUint8(offset)&0x80)
+				item.associations[j].essential=true; 
+			if (result.flags & 1) {
+				propIndex=dataView.getUint16(offset)&0x7FFF;
+				offset+=2;
+			} else {
+				propIndex=dataView.getUint8(offset)&0x7F;
+				offset+=1;
+			}
+			propIndex--;
+			if (propIndex<props.length) {
+				item.associations[j].type=props[propIndex].type;
+				if (props[propIndex].type=="ispe" || props[propIndex].type=="pixi" || props[propIndex].type=="uuid")
+					copyPropertiesIpcoBox(item, props[propIndex]);
+			}
+		}
+		if (showDump)
+			showDump(items, divIdItem);
+	}
+	if (sidecarUrl) {
+		addGeoreferenceToItems(items, await getURLText(sidecarUrl));
+		if (showDump)
+			showDump(items, divIdItem);
+	}
+	return items;
+}
+
+async function getURLRange(url, begin, end){
+	var response=await fetch(url, {
+        	headers: {
+        	    'range': 'bytes='+begin+'-'+end
+	        }
+    	});
+	if (!response?.ok) {
+		return;
+	}
+	return await response.arrayBuffer();;
+}
+
+async function getURLText(url){
+	var response=await fetch(url);
+	if (!response?.ok) {
+		return;
+	}	
+	return await response.text();
+}
+
+async function getURLSize(url){
+	var response=await fetch(url, {
+		method: "HEAD"
+    	});
+	if (!response?.ok) {
+		return;
+	}
+	if (response.headers.get('Content-Length')==null)
+		return;
+	return parseInt(response.headers.get('Content-Length'));
+}
+
+function getBoxSize(dataView, offset, start, fileSize){
+	var size=dataView.getUint32(offset);
+	/*if (size==1) {  //It is considered later.
+		console.log("Size=1 not implemented");
+		return;
+	}*/
+	if (size==0) 
+		size=fileSize-start;
+	return size;
+}
+
+async function getBoxLargeSizeURL(url, begin, end, fileSize){
+			
+	if (fileSize - begin + 1 < 8) {
+		console.log("Not enough file size to parse the largesize of the box");
+		return;
+	}	
+	var buffer=await getURLRange(url, begin, end);
+	if(!buffer)
+		return;	
+	var dataView = new DataView(buffer);
+	if(!dataView)
+		return;	
+	var large_size=dataView.getUint64(0);
+	return large_size;	
+}
+
+function getFullBoxVersion(dataView, offset) {
+	return dataView.getUint8(offset);
+}
+
+function getFullBoxFlags(dataView, offset) {
+	return dataView.getUint8(offset+2)+dataView.getUint8(offset+1)*256+dataView.getUint8(offset)*256*256;
+}
+
+function getBoxType(dataView, offset){
+	return String.fromCharCode(dataView.getUint8(offset))+String.fromCharCode(dataView.getUint8(offset+1))+
+		String.fromCharCode(dataView.getUint8(offset+2))+String.fromCharCode(dataView.getUint8(offset+3));
+}
+
+function getSOHString(dataView, offset, size){
+	var s="";
+	for (var i=0; offset<size; i++) {
+		if (dataView.getUint8(offset)==0)
+			return s;
+		s+=String.fromCharCode(dataView.getUint8(offset));
+		offset++;
+	}
+	return s;
+}
+
+function getSOHStringSize(s, offset, size){
+	var l=s.length;
+	if (offset<size)
+		l++;
+	return l;
+}
+
+function getBoxUUIDType(dataView, offset){
+	var s="", h;
+	for (var i=0; i<4; i++) {
+		h=dataView.getUint8(offset+i).toString(16).toLowerCase();
+		s+=h.length==1 ? "0"+h : h;
+	}
+	s+="-"
+	for (var i=4; i<6; i++) {
+		h=dataView.getUint8(offset+i).toString(16).toLowerCase();
+		s+=h.length==1 ? "0"+h : h;
+	}
+	s+="-"
+	for (var i=6; i<8; i++) {
+		h=dataView.getUint8(offset+i).toString(16).toLowerCase();
+		s+=h.length==1 ? "0"+h : h;
+	}
+	s+="-"
+	for (var i=8; i<16; i++) {
+		h=dataView.getUint8(offset+i).toString(16).toLowerCase();
+		s+=h.length==1 ? "0"+h : h;
+	}
+	return s;
+}
+
+//result.dataOffset is number of bytes between the start the box and the start of the data (the size of the headers of a box; not the offset for the start of dataView)
+function readSOHBox(dataView, offset, start, fileSize){
+	var dataOffset=offset;
+	var size=getBoxSize(dataView, offset, start, fileSize);
+	var type=getBoxType(dataView, offset+4);
+	offset+=8; 
+	if (size==1) {
+		size=dataView.getUint64(offset+8)
+		offset+=8;
+	}
+	if (type=="uuid") {
+		var userType=getBoxUUIDType(dataView, offset);
+		offset+=16;
+	}
+	var result={start: start, size: size, type: type, dataOffset: offset-dataOffset}
+	if (type=="uuid")
+		result.userType=userType;
+	return result;	
+}
+
+//result.dataOffset is number of bytes between the start the full box and the start of the data (the size of the headers of a full box; not the offset for the start of dataView)
+function readSOHFullBox(dataView, offset, start, fileSize){
+	var result=readSOHBox(dataView, offset, start, fileSize);
+	result.version=getFullBoxVersion(dataView, offset+result.dataOffset);
+	result.flags=getFullBoxFlags(dataView, offset+result.dataOffset+1);
+	result.dataOffset+=4;
+	return result;
+}
+
+// if limit==-1 not content read
+async function readSOHBoxURL(url, start, fileSize, limit){	
+	if (fileSize - start + 1 < 8) {
+		console.log("Not enough file size to parse the type and size of the box");
+		return;
+	}	
+	var begin=start, end=begin+7, dataOffset=8;	
+	var buffer=await getURLRange(url, begin, end);
+	if(!buffer)
+		return;
+	var dataView = new DataView(buffer);
+	if(!dataView)
+		return;
+		
+	// size
+	var size = getBoxSize(dataView, 0, begin, fileSize);
+	// boxtype
+	var type=getBoxType(dataView, 4);
+		
+	if (size==1) {		
+		// the size is a largesize
+		begin=end+1;
+		end=begin+7;
+		var size = getBoxLargeSizeURL(url, begin, end, fileSize);
+		dataOffset+=8;		
+	}	
+
+	if (type=="uuid") {
+		begin=end+1;
+		end=begin+15;
+		buffer=await getURLRange(url, begin, end);
+		dataView = new DataView(buffer);
+		if(!dataView)
+			return;
+		type=getBoxUUIDType(dataView, 0);
+		dataOffset+=16;		
+	}
+		
+	// content
+	if(limit && limit==-1){
+		dataView=null;
+	}
+	else{
+		begin=start+dataOffset;
+		end=(limit && (size-dataOffset)>limit) ? begin+limit-1 : start+size-1;
+		buffer=await getURLRange(url, begin, end);
+		if(!buffer)
+			return;
+		dataView = new DataView(buffer);
+		if(!dataView)
+			return;
+	}
+	return {start: start, size: size, type: type, dataOffset: dataOffset, dataView: dataView};
+}
+
+function addGeoreferenceToItems(items, ttl){
+	const jsonld = ttl2jsonld.parse(ttl);
+	for (var i=0; i<items.length; i++) {
+		if (!items[i].contentId)
+			continue;
+		for (var j=0; j<jsonld["@graph"].length; j++) {
+			if (!jsonld["@graph"][j]["cco:ont00001808"] || jsonld["@graph"][j]["cco:ont00001808"]["@id"]!=items[i].contentId)
+				continue;
+			items[i].wkt=jsonld["@graph"][j]["geosparql:asWKT"]["@value"];
+			break;
+		}
+	}
+}
+
