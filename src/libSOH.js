@@ -1,29 +1,32 @@
 "use strict"
 
-//This function was not been used yet.
-function parseSOHFileTypeBox(box)
-{
-	if(!box)
-		return;
-		
-	if(!box.dataView)
-		return;
-			
-	box.major_brand=box.dataView.getUint32(0);
-	box.minor_version=box.dataView.getUint32(4);
-	var bytesToParse=box.size-16; /*4:size; 4: type; 4 major_brand; 4: minor_version*/
-	if(bytesToParse>=8)
-	{
-		start=7+1;
-		box.compatible_brands=[];
-		for(var i=0; i<bytesToParse/8; i++)
+function readSOHFtypBox(dataView, offset, dataOffset, size) {
+	var result={};
+	result.majorBrand=getSOHString(dataView, offset, offset+4)
+	result.minorVersion=dataView.getUint32(4);
+	offset+=8;
+	if (offset<size-dataOffset-3) {
+		result.compatibleBrands=[];
+		while(offset<size-dataOffset-3)
 		{
-			box.compatible_brands.push(box.dataView.getUint32(start));
-			start=+8;
+			result.compatibleBrands.push(getSOHString(dataView, offset, offset+4));
+			offset+=4;
 		}
 	}
-	return box;
+	return result;
 }
+
+
+async function readSOHFtypBoxURL(url, fileInfo) {
+
+	var i=getIndexSOHBoxType(fileInfo.boxes, "ftyp");
+	if (i==-1)
+		return;
+
+	var result=await readSOHBoxURL(url, fileInfo.boxes[i].start, fileInfo.fileSize);
+	return readSOHFtypBox(result.dataView, 0, result.dataOffset, result.size);
+}
+
 
 async function readSOHBoxDumpURL(url, limit, divIdBox, showDump) {
 	var start = 0, result, array=[];
@@ -32,7 +35,7 @@ async function readSOHBoxDumpURL(url, limit, divIdBox, showDump) {
 	while (result=await readSOHBoxURL(url, start, fileSize, limit)) {
 		array.push(result);
 		if (showDump)
-			showDump(array, divIdBox);
+			showDump({boxes: array}, divIdBox);
 		if (result.type=='meta' && result.dataView && result.dataView.getUint32(0)==0) {
 			var startBox=start + 12;
 			var endBox=result.size+start;
@@ -41,7 +44,7 @@ async function readSOHBoxDumpURL(url, limit, divIdBox, showDump) {
 				resultBox.type='meta'+'/'+resultBox.type;
 				array.push(resultBox);
 				if (showDump)
-					showDump(array, divIdBox);
+					showDump({boxes: array}, divIdBox);
 				startBox+=resultBox.size;
 				if (startBox>=endBox)
 					break;
@@ -99,6 +102,47 @@ function readSOHPixi(dataView, offset, start, fileSize) {
 	return result;
 }
 
+const possibleOffsetTileLengths=[32, 40, 48, 64];
+const possibleSizeTileLengths=[0, 24, 32, 64];
+function readSOHTilC(dataView, offset, start, fileSize) {
+	var offsetIni=offset;
+	var result=readSOHFullBox(dataView, offset, start, fileSize);
+	offset+=result.dataOffset;
+	result.tileWidth=dataView.getUint32(offset);
+	result.tileHeight=dataView.getUint32(offset+4);
+
+	result.offsetTileLength=possibleOffsetTileLengths[result.flags&0x03]
+	result.sizeTileLength=possibleSizeTileLengths[(result.flags>>2) & 0x03];
+	result.areTileOffsetsSequential=(result.flags & 0x10) ? true : false;
+
+	result.tileCompressionType=getBoxType(dataView, offset+8);
+
+	var numberOfExtraDimensions=dataView.getUint8(offset+12);
+	offset+=13;
+	if (numberOfExtraDimensions) {
+		result.extraDimensionSizes=[];
+	  	for (var i=0; i<numberOfExtraDimensions; i++) { 
+			result.extraDimensionSizes[i].push(dataView.getUint32(offset));
+			offset+=4;
+		}
+	}
+
+	var numberOfTileProperties=dataView.getUint8(offset);
+	offset+=1;
+	var prop;
+	if (numberOfTileProperties) {
+		result.tileProperties=[];
+	  	for (var i=0; i<numberOfTileProperties; i++) { 
+			prop=readSOHBox(dataView, offset, start, fileSize);
+			result.tileProperties[i]=prop.type;
+			offset+=prop.size;
+		}
+	}
+	result.dataOffset+=offset-offsetIni;
+
+	return result;
+}
+
 function copyPropertiesIpcoBox(item, prop) {
 	var propArray=Object.keys(prop);
 	for (var i=0; i<propArray.length; i++){
@@ -109,7 +153,7 @@ function copyPropertiesIpcoBox(item, prop) {
 }
 
 async function readSOHItemsDumpURL(url, sidecarUrl, fileInfo, divIdItem, showDump) {
-	var result, resultItem, items=[], offset, offsetItem, entryCount;
+	var result, resultItem, offset, offsetItem, entryCount;
 
 	var i=getIndexSOHBoxType(fileInfo.boxes, "meta/iinf");
 	if (i==-1)
@@ -287,6 +331,8 @@ async function readSOHItemsDumpURL(url, sidecarUrl, fileInfo, divIdItem, showDum
 			prop=readSOHIspe(dataView, offset, start, fileInfo.fileSize);
 		else if (prop.type=="pixi")
 			prop=readSOHPixi(dataView, offset, start, fileInfo.fileSize);
+		else if (prop.type=="tilC")
+			prop=readSOHTilC(dataView, offset, start, fileInfo.fileSize);
 		else if (prop.type=="uuid") 
 			prop.contentId=getSOHString(dataView, offset+prop.dataOffset, offset+prop.size);
 
@@ -334,10 +380,72 @@ async function readSOHItemsDumpURL(url, sidecarUrl, fileInfo, divIdItem, showDum
 			propIndex--;
 			if (propIndex<props.length) {
 				item.associations[j].type=props[propIndex].type;
-				if (props[propIndex].type=="ispe" || props[propIndex].type=="pixi" || props[propIndex].type=="uuid")
+				if (props[propIndex].type=="ispe" || props[propIndex].type=="pixi" || props[propIndex].type=="uuid" || props[propIndex].type=="tilC")
 					copyPropertiesIpcoBox(item, props[propIndex]);
 			}
 		}
+
+		//Calculating number of tiles
+		if (item.tileWidth && item.imageWidth && item.tileHeight && item.imageHeight) {
+			item.matrixWidth = Math.trunc((item.imageWidth + item.tileWidth -1)/item.tileWidth);
+			item.matrixHeight = Math.trunc((item.imageHeight + item.tileHeight -1)/item.tileHeight);
+			var nTiles = item.matrixWidth * item.matrixHeight;
+			if (item.extraDimensionSizes &&item.extraDimensionSizes.length) {
+				for (var k=0; k<item.extraDimensionSizes.length; z++)
+					nTiles *= item.extraDimensionSizes[z];
+			}
+			var sizeMdatTileHeader=(item.offsetTileLength+item.sizeTileLength)/8*nTiles;
+			if (item.extents.length>1 && sizeMdatTileHeader>item.extents[0].extentLength) {
+				console.log("Offsets of thetiles in 'mdat' box are in two or more separate chucks. This is not supported.");
+				sizeMdatTileHeader=item.extents[0].extentLength;
+			}
+			var headerOffsetBuffer=await getURLRange(url, item.extents[0].extentOffset, item.extents[0].extentOffset+sizeMdatTileHeader-1);
+			var headerOffsetDV = new DataView(headerOffsetBuffer);
+			var offsetHeader=0;
+			if (headerOffsetDV) {
+				item.tiles=[];
+				for (j=0; j<nTiles; j++) {
+					item.tiles.push({});
+					switch(item.offsetTileLength) {
+						case 32:
+							item.tiles[j].offset=headerOffsetDV.getUint32(offsetHeader);
+							break;
+						case 40:
+							item.tiles[j].offset=headerOffsetDV.getUint32(offsetHeader)*256 + 
+										headerOffsetDV.getUint8(offsetHeader+4);
+							break;
+						case 48:
+							item.tiles[j].offset=headerOffsetDV.getUint32(offsetHeader)*65536 + 
+											headerOffsetDV.getUint16(offsetHeader+4);
+							break;
+						case 64:
+							item.tiles[j].offset=headerOffsetDV.getBigUint64(offsetHeader);
+							break;
+					}
+					offsetHeader+=item.offsetTileLength/8;
+					switch(item.sizeTileLength) {
+						case 0:
+							if (item.areTileOffsetsSequential && j>0)
+								item.tiles[j-1].size=item.tiles[j].offset-item.tiles[j-1].offset;
+						case 24:
+							item.tiles[j].size=headerOffsetDV.getUint16(offsetHeader)*65536 + 
+										headerOffsetDV.getUint8(offsetHeader+2);
+							break;
+						case 32:
+							item.tiles[j].size=headerOffsetDV.getUint32(offsetHeader);
+							break;
+						case 64:
+							item.tiles[j].size=headerOffsetDV.getBigUint64(offsetHeader);
+							break;
+					}
+					offsetHeader+=item.sizeTileLength/8;
+				}
+				if (item.sizeTileLength==0 && item.areTileOffsetsSequential)
+					item.tiles[nTiles-1].size=(nTiles>1) ? item.extents[0].extentOffset+item.extents[0].extentLength-item.tiles[nTiles-2].offset : //The end of the box minus the last offset
+								item.extents[0].extentLength-sizeMdatTileHeader;
+  			}
+		}
+	
 		if (showDump)
 			showDump(items, divIdItem);
 	}
@@ -347,6 +455,57 @@ async function readSOHItemsDumpURL(url, sidecarUrl, fileInfo, divIdItem, showDum
 			showDump(items, divIdItem);
 	}
 	return items;
+}
+
+function addSOHPymd(group, dataView, offset){
+	group.tileSizeX=dataView.getUint16(offset);
+	group.tileSizeY=dataView.getUint16(offset+2);
+	offset+=4;
+	for (var i=0; i<group.entities.length; i++)
+	{
+		group.entities[i].sizeMultiple=dataView.getUint16(offset);      //layer_binning
+		group.entities[i].matrixHeight=dataView.getUint16(offset+2)+1;   //tiles_in_layer_row_minus1+1
+		group.entities[i].matrixWidth=dataView.getUint16(offset+4)+1;  //tiles_in_layer_column_minus1+1
+		offset+=6;
+	}
+}
+
+async function readSOHGroupsDumpURL(url, fileInfo, divIdGroups, showDump) {
+	var result, resultItem, offset, offsetItem, entryCount;
+
+	var i=getIndexSOHBoxType(fileInfo.boxes, "meta/grpl");
+	if (i==-1)
+		return;
+
+	//Reading grpl as a Box 
+	var start=fileInfo.boxes[i].start;
+	result=await readSOHBoxURL(url, start, fileInfo.fileSize);
+	offset=0;
+	var dataView=result.dataView;
+
+	var groups=[], group;
+	while (result.size>offset+result.dataOffset){
+		group=readSOHFullBox(dataView, offset, start, fileInfo.fileSize);
+		var groupOffset=offset+group.dataOffset;
+		group.groupId=dataView.getUint32(groupOffset);
+		var numEntitiesInGroup=dataView.getUint32(groupOffset+4);
+		groupOffset+=8;
+		if (numEntitiesInGroup) {
+			group.entities=[];
+			for (var i=0; i<numEntitiesInGroup; i++) {
+				group.entities[i]={entityId: dataView.getUint32(groupOffset)};
+				groupOffset+=4;
+			}
+		}
+		//Details of reading each individual box
+		if (group.type=="pymd")
+			addSOHPymd(group, dataView, groupOffset);
+
+		groups.push(group);
+		offset+=group.size;
+		if (showDump)
+			showDump(groups, divIdGroups);
+	}
 }
 
 async function getURLRange(url, begin, end){
@@ -492,7 +651,8 @@ function readSOHFullBox(dataView, offset, start, fileSize){
 	return result;
 }
 
-// if limit==-1 not content read
+/* limit==-1: Do not read the data (dataView is undefined in the return)
+   limit==0 (or undefined): No limit; read the complete data. */
 async function readSOHBoxURL(url, start, fileSize, limit){	
 	if (fileSize - start + 1 < 8) {
 		console.log("Not enough file size to parse the type and size of the box");
@@ -510,7 +670,7 @@ async function readSOHBoxURL(url, start, fileSize, limit){
 	var size = getBoxSize(dataView, 0, begin, fileSize);
 	// boxtype
 	var type=getBoxType(dataView, 4);
-		
+
 	if (size==1) {		
 		// the size is a largesize
 		begin=end+1;
@@ -518,6 +678,9 @@ async function readSOHBoxURL(url, start, fileSize, limit){
 		var size = getBoxLargeSizeURL(url, begin, end, fileSize);
 		dataOffset+=8;		
 	}	
+
+	if (size==dataOffset)   //This is an empty box
+		return {start: start, size: size, type: type, dataOffset: dataOffset};
 
 	if (type=="uuid") {
 		begin=end+1;
@@ -530,20 +693,21 @@ async function readSOHBoxURL(url, start, fileSize, limit){
 		dataOffset+=16;		
 	}
 		
-	// content
-	if(limit && limit==-1){
-		dataView=null;
+	if (size==dataOffset ||   //This is an empty box
+	    (limit && limit==-1)) //Do not read the content 
+  		return {start: start, size: size, type: type, dataOffset: dataOffset};
+
+	begin=start+dataOffset;
+	end=(limit && (size-dataOffset)>limit) ? begin+limit-1 : start+size-1;
+	buffer=await getURLRange(url, begin, end);
+	if(!buffer)
+		return;
+	dataView = new DataView(buffer);
+	if (!dataView) {
+		console.log("Failure in reading the content for the '" + type + "' section");
+		return;
 	}
-	else{
-		begin=start+dataOffset;
-		end=(limit && (size-dataOffset)>limit) ? begin+limit-1 : start+size-1;
-		buffer=await getURLRange(url, begin, end);
-		if(!buffer)
-			return;
-		dataView = new DataView(buffer);
-		if(!dataView)
-			return;
-	}
+
 	return {start: start, size: size, type: type, dataOffset: dataOffset, dataView: dataView};
 }
 

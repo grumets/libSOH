@@ -9,22 +9,32 @@
 	<script>
 "use strict"
 
-function readSOHForm(divIdURL, divIdSidecarURL, divIdLimit, divIdBox, divIdItem){
-	readSOHFormAsync(divIdURL, divIdSidecarURL, divIdLimit, divIdBox, divIdItem);
+function readSOHForm(divIdURL, divIdSidecarURL, divIdLimit, divIdBoxes, divIdItems, divIdGroups){
+	readSOHFormAsync(divIdURL, divIdSidecarURL, divIdLimit, divIdBoxes, divIdItems, divIdGroups);
 	return false;
 }
 
-async function readSOHFormAsync(divIdURL, divIdSidecarURL, divIdLimit, divIdBox, divIdItem){
-	var fileInfo=await readSOHBoxDumpURL(document.getElementById(divIdURL).value, parseInt(document.getElementById(divIdLimit).value), divIdBox, showBox);
-	if (divIdItem)
-		fileInfo.items=await readSOHItemsDumpURL(document.getElementById(divIdURL).value, document.getElementById(divIdSidecarURL).value, fileInfo, divIdItem, showItem);
+async function readSOHFormAsync(divIdURL, divIdSidecarURL, divIdLimit, divIdBoxes, divIdItems, divIdGroups){
+	var url=document.getElementById(divIdURL).value;
+	var fileInfo=await readSOHBoxDumpURL(url, parseInt(document.getElementById(divIdLimit).value), divIdBoxes, showBoxes);
+	if (!fileInfo)
+		return;
+	fileInfo.brand=await readSOHFtypBoxURL(url, fileInfo);
+	if (fileInfo.brand)
+		showBoxes(fileInfo, divIdBoxes)
+	if (divIdItems)
+		fileInfo.items=await readSOHItemsDumpURL(url, document.getElementById(divIdSidecarURL).value, fileInfo, divIdItems, showItems);
+	if (divIdGroups)
+		fileInfo.items=await readSOHGroupsDumpURL(url, fileInfo, divIdGroups, showGroups);
 	return fileInfo;
 }
 
 
 function dataViewToHexa(dataView, limit)
 {
-var len=dataView.byteLength, s="", h;
+	if (!dataView)
+		return "";
+	var len=dataView.byteLength, s="", h;
 
 	if (limit && len>limit) len=limit;
 	for(var i=0; i<len; i++)
@@ -37,7 +47,10 @@ var len=dataView.byteLength, s="", h;
 
 function dataViewToChar(dataView, limit)
 {
-var len=dataView.byteLength, s="", c;
+	if (!dataView)
+		return "";
+
+	var len=dataView.byteLength, s="", c;
 
 	if (limit && len>limit) len=limit;
 	for(var i=0; i<len; i++) {
@@ -57,7 +70,9 @@ var len=dataView.byteLength, s="", c;
 
 function dataViewToDeci(dataView, limit)
 {
-var len=dataView.byteLength, s="";
+	if (!dataView)
+		return "";
+	var len=dataView.byteLength, s="";
 
 	if (limit && len>limit) len=limit;
 	for(var i=0; i<len; i++)
@@ -66,16 +81,34 @@ var len=dataView.byteLength, s="";
 	return s;
 }
 
-async function showBox(array, divShow) {
-	var s="<table border=1><tr><th>Size</th><th>Type</th><th>Data (String)</th><th>Data (Number)</th><th>Data (Hex)</th></tr>";
-	for (var i=0; i<array.length; i++)
-		s+="<tr><td>" + array[i].size + "</td><td>" + array[i].type + "</td><td>" + dataViewToChar(array[i].dataView) + "</td><td>" + dataViewToDeci(array[i].dataView) + "</td><td style='font-family: monospace;'>" + dataViewToHexa(array[i].dataView) + "</td></tr>";
-	s+="</table>";
-	document.getElementById(divShow).innerHTML=s;
+async function showBoxes(fileInfo, divId) {
+	var array=fileInfo.boxes, brand=fileInfo.brand, s="";
+	if (brand) {
+		s+="<H3>Brand information</H3>";
+		s+=brand.majorBrand + ", " + brand.minorVersion;
+		if (brand.compatibleBrands) {
+			s+=", [";
+			for (var i=0; i<brand.compatibleBrands.length; i++) {
+				s+=brand.compatibleBrands[i];
+				if (i+1<brand.compatibleBrands.length)
+					s+=", ";
+			}
+			s+="]";
+		}
+	}
+	if (array) {
+		s+="<H3>Boxes information</H3>";
+		s+="<table border=1><tr><th>Size</th><th>Type</th><th>Data (String)</th><th>Data (Number)</th><th>Data (Hex)</th></tr>";
+		for (var i=0; i<array.length; i++)
+			s+="<tr><td>" + array[i].size + "</td><td>" + array[i].type + "</td><td>" + dataViewToChar(array[i].dataView) + "</td><td>" + dataViewToDeci(array[i].dataView) + "</td><td style='font-family: monospace;'>" + dataViewToHexa(array[i].dataView) + "</td></tr>";
+		s+="</table>";
+	}
+	document.getElementById(divId).innerHTML=s;
 }
 
-async function showItem(items, divItem) {
-	var s="<table border=1><tr><th>Id</th><th>Name</th><th>Type</th><th>Byte ranges</th><th>Witdh & height</th><th>Bits per channel</th><th>Content ID</th><th>WKT</th></tr>";
+async function showItems(items, divId) {
+	var s="<H3>Items information</H3>";
+	s+="<table border=1><tr><th>Id</th><th>Name</th><th>Type</th><th>Byte ranges</th><th>Witdh & height</th><th>Bits per channel</th><th>Tile width & height</th><th>Content ID</th><th>WKT</th></tr>";
 	for (var i=0; i<items.length; i++) {
 		s+="<tr><td>" + items[i].itemId + "</td><td>" + items[i].itemName + "</td><td>" + (items[i].itemType=='mime' ? items[i].contentType : items[i].itemType=='uri ' ? items[i].itemUriType : items[i].itemType) + "</td><td>";
 		if (items[i].extents) {
@@ -98,6 +131,10 @@ async function showItem(items, divItem) {
 			s+="]";
 		}
 		s+="</td><td>";
+		if (typeof items[i].tileWidth !== "undefined" && typeof items[i].tileHeight !== "undefined") {
+			s+=items[i].tileWidth + ", " + items[i].tileHeight;
+		}
+		s+="</td><td>";
 		if (items[i].contentId)
 			s+=items[i].contentId;
 		s+="</td><td>";
@@ -106,7 +143,49 @@ async function showItem(items, divItem) {
 		s+="</td></tr>";
 	}
 	s+="</table>";
-	document.getElementById(divItem).innerHTML=s;
+	document.getElementById(divId).innerHTML=s;
+}
+
+async function showGroups(groups, divId) {
+	var s="<H3>Groups information</H3>";
+	s+="<table border=1><tr><th>Id</th><th>Type</th><th>Tile width</th><th>Tile height</th><th>Tile matrices</th><th>Size multiple</th><th>Matrix widths</th><th>Matrix heights</th></tr>";
+	for (var i=0; i<groups.length; i++) {
+		s+="<tr><td>" + groups[i].groupId + "</td><td>" + groups[i].type + "</td><td>";
+		if (groups[i].tileSizeX)
+			s+=groups[i].tileSizeX;
+		s+="</td><td>";
+		if (groups[i].tileSizeY)
+			s+=groups[i].tileSizeY;
+		s+="</td><td>";
+
+		if (groups[i].entities) {
+			s+=groups[i].entities.length;
+			s+="</td><td>[";
+			for (var j=0; j<groups[i].entities.length; j++) {
+				s+=groups[i].entities[j].sizeMultiple;
+				if (j+1<groups[i].entities.length)
+					s+=",";
+			}
+			s+="]</td><td>[";
+			for (var j=0; j<groups[i].entities.length; j++) {
+				s+=groups[i].entities[j].matrixWidth;
+				if (j+1<groups[i].entities.length)
+					s+=",";
+			}
+			s+="]</td><td>[";
+			for (var j=0; j<groups[i].entities.length; j++) {
+				s+=groups[i].entities[j].matrixHeight;
+				if (j+1<groups[i].entities.length)
+					s+=",";
+			}
+			s+="]";
+		} else
+			s+="</td><td></td><td></td><td>";
+
+		s+="</td></tr>";
+	}		
+	s+="</table>";
+	document.getElementById(divId).innerHTML=s;
 }
 
 	</script>
@@ -114,10 +193,12 @@ async function showItem(items, divItem) {
 
 <body>
 	<form>
-	HEIF URL: <input id="heifURL" value="tb21_4x4_grid.heif"/> sidecar: <input id="sidecarURL" value="tb21_4x4_grid.ttl"/>
-	<button onClick='return readSOHForm("heifURL", "sidecarURL", "limit", "heifBox", "heifItem");'>read</button>
+	<!--HEIF URL: <input id="heifURL" value="tb21_4x4_grid.heif"/> sidecar: <input id="sidecarURL" value="tb21_4x4_grid.ttl"/>-->
+	HEIF URL: <input id="heifURL" value="rotterdam.avif"/> sidecar: <input id="sidecarURL" value=""/>
+	<button onClick='return readSOHForm("heifURL", "sidecarURL", "limit", "heifBoxes", "heifItems", "heifGroups");'>read</button>
 	Data max length: <input id="limit" value="20"/><br>
-	<div id="heifBox"></div>
-	<div id="heifItem"></div>
+	<div id="heifBoxes"></div>
+	<div id="heifItems"></div>
+	<div id="heifGroups"></div>
 	</form>
 </body>
