@@ -25,7 +25,7 @@ async function readSOHFormAsync(divIdURL, divIdSidecarURL, divIdLimit, divIdBoxe
 	if (divIdItems)
 		fileInfo.items=await readSOHItemsDumpURL(url, document.getElementById(divIdSidecarURL).value, fileInfo, divIdItems, showItems);
 	if (divIdGroups)
-		fileInfo.items=await readSOHGroupsDumpURL(url, fileInfo, divIdGroups, showGroups);
+		fileInfo.groups=await readSOHGroupsDumpURL(url, fileInfo, divIdGroups, showGroups);
 	return fileInfo;
 }
 
@@ -108,7 +108,7 @@ async function showBoxes(fileInfo, divId) {
 
 async function showItems(items, divId) {
 	var s="<H3>Items information</H3>";
-	s+="<table border=1><tr><th>Id</th><th>Name</th><th>Type</th><th>Byte ranges</th><th>Witdh & height</th><th>Bits per channel</th><th>Tile width & height</th><th>Content ID</th><th>WKT</th></tr>";
+	s+="<table border=1><tr><th>Id</th><th>Name</th><th>Type</th><th>Byte ranges</th><th>Witdh & height</th><th>Bits per channel</th><th>Tile width & height</th><th>Matrix width & height</th><th>N of tiles</th><th>Byte range of first tiles from the box origin</th><th>Content ID</th><th>WKT</th></tr>";
 	for (var i=0; i<items.length; i++) {
 		s+="<tr><td>" + items[i].itemId + "</td><td>" + items[i].itemName + "</td><td>" + (items[i].itemType=='mime' ? items[i].contentType : items[i].itemType=='uri ' ? items[i].itemUriType : items[i].itemType) + "</td><td>";
 		if (items[i].extents) {
@@ -135,6 +135,26 @@ async function showItems(items, divId) {
 			s+=items[i].tileWidth + ", " + items[i].tileHeight;
 		}
 		s+="</td><td>";
+		if (typeof items[i].matrixWidth !== "undefined" && typeof items[i].matrixHeight !== "undefined") {
+			s+=items[i].matrixWidth + ", " + items[i].matrixHeight;
+		}
+		s+="</td><td>";
+		if (items[i].tiles) {
+			s+=items[i].tiles.length;
+		}
+		s+="</td><td>";
+		if (items[i].tiles) {
+			s+="[";
+			for (var j=0; j<5 && j<items[i].tiles.length; j++) {
+				s+="[" + items[i].tiles[j].offset + "-" + (items[i].tiles[j].offset+items[i].tiles[j].size-1) + "]";
+				if (j+1<5 && j+1<items[i].tiles.length)
+					s+=",";
+				else if (j+1<items[i].tiles.length)
+					s+=",...";
+			}
+			s+="]";
+		}
+		s+="</td><td>";
 		if (items[i].contentId)
 			s+=items[i].contentId;
 		s+="</td><td>";
@@ -151,11 +171,11 @@ async function showGroups(groups, divId) {
 	s+="<table border=1><tr><th>Id</th><th>Type</th><th>Tile width</th><th>Tile height</th><th>Tile matrices</th><th>Size multiple</th><th>Matrix widths</th><th>Matrix heights</th></tr>";
 	for (var i=0; i<groups.length; i++) {
 		s+="<tr><td>" + groups[i].groupId + "</td><td>" + groups[i].type + "</td><td>";
-		if (groups[i].tileSizeX)
-			s+=groups[i].tileSizeX;
+		if (groups[i].tileWidth)
+			s+=groups[i].tileWidth;
 		s+="</td><td>";
-		if (groups[i].tileSizeY)
-			s+=groups[i].tileSizeY;
+		if (groups[i].tileHeight)
+			s+=groups[i].tileHeight;
 		s+="</td><td>";
 
 		if (groups[i].entities) {

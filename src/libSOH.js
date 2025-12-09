@@ -428,7 +428,7 @@ async function readSOHItemsDumpURL(url, sidecarUrl, fileInfo, divIdItem, showDum
 							if (item.areTileOffsetsSequential && j>0)
 								item.tiles[j-1].size=item.tiles[j].offset-item.tiles[j-1].offset;
 						case 24:
-							item.tiles[j].size=headerOffsetDV.getUint16(offsetHeader)*65536 + 
+							item.tiles[j].size=headerOffsetDV.getUint16(offsetHeader)*256 + 
 										headerOffsetDV.getUint8(offsetHeader+2);
 							break;
 						case 32:
@@ -458,8 +458,8 @@ async function readSOHItemsDumpURL(url, sidecarUrl, fileInfo, divIdItem, showDum
 }
 
 function addSOHPymd(group, dataView, offset){
-	group.tileSizeX=dataView.getUint16(offset);
-	group.tileSizeY=dataView.getUint16(offset+2);
+	group.tileWidth=dataView.getUint16(offset);
+	group.tileHeight=dataView.getUint16(offset+2);
 	offset+=4;
 	for (var i=0; i<group.entities.length; i++)
 	{
@@ -506,6 +506,7 @@ async function readSOHGroupsDumpURL(url, fileInfo, divIdGroups, showDump) {
 		if (showDump)
 			showDump(groups, divIdGroups);
 	}
+	return groups;
 }
 
 async function getURLRange(url, begin, end){

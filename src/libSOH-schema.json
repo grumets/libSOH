@@ -11,10 +11,12 @@
 				"properties": {
 					"start": { 
 						"type": "integer",
+						"minimum": 0,
 						"description": "Offset of the box in the full file (starting by 0)"
 					},
 					"size": { 
 						"type": "integer",
+						"minimum": 0,
 						"description": "Size of box in bytes including the size itself and the type"
 					},
 					"type": { 
@@ -23,6 +25,7 @@
 					},
 					"dataOffset": { 
 						"type": "integer",
+						"minimum": 0,
 						"description": "Offset of the data in the box from the start of the box (not from the start of the file). Commonly 8"
 					},
 					"dataView": { 
@@ -34,8 +37,269 @@
 		},
 		"items": {
 			"type": "array",
+			"description": "List of the items in the file based on the 'iinf' box and the 'infe' subboxes",
 			"items": {
-				"type": "object"
+				"type": "object",
+				"properties": {
+					"start": { 
+						"type": "integer",
+						"minimum": 0,
+						"description": "Offset of the 'infe' box in the full file (starting by 0)"
+					},
+					"size": { 
+						"type": "integer",
+						"minimum": 0,
+						"description": "Size of the 'infe' box in bytes including the size itself and the type"
+					},
+					"type": { 
+						"type": "string",
+						"enum": ["infe"],
+						"description": "Four caracters in 4ccc format (always 'infe')"
+					},
+					"dataOffset": { 
+						"type": "integer",
+						"minimum": 0,
+						"description": "Offset of the data from the start of the dataview of the 'infe' (not from the start of the file)."
+					},
+					"version": { 
+						"type": "integer",
+						"minimum": 0,
+						"description": "Version of the 'infe' full box."
+					},
+					"flags": { 
+						"type": "integer",
+						"minimum": 0,
+						"description": "Flags of the 'infe' full box. Commonly encoded as bits"
+					},
+					"itemId": { 
+						"type": "integer",
+						"minimum": 0,
+						"description": "Item identifier (in the 'infe' full box)."
+					},
+					"itemProtectionIndex": { 
+						"type": "integer",
+						"minimum": 0,
+						"description": "Data protection index of the item (in the 'infe' full box)."
+					},
+					"itemType": { 
+						"type": "string",
+						"description": "Type of the item in the 'infe' full box (e.g. 'tili') ."
+					},
+					"itemName": { 
+						"type": "string",
+						"description": "Name of the item (in the 'infe' full box)."
+					},
+					"extents": {
+						"type": "array",
+						"description": "Extents of the item from the 'iloc' box.",
+						"items": {
+							"type": "object",
+							"description": "A single extent of the item (in bytes) from the 'iloc' box.",
+							"properties": {
+								"extentIndex": { 
+									"type": "integer",
+									"minimum": 0,
+									"description": "Index of the extent"
+								},
+								"extentOffset": { 
+									"type": "integer",
+									"minimum": 0,
+									"description": "Offset of the range of bytes of the data in the file for this item."
+								},
+								"extentLength": { 
+									"type": "integer",
+									"minimum": 0,
+									"description": "Size of the range of bytes of the data in the file for this item."
+								}
+							}
+						}
+					},
+					"associations": {
+						"type": "array",
+						"description": "Types of 'ipco' sections associated to this item.",
+						"items": {
+							"type": "object",
+							"description": "Type of 'ipco' sections associated to this item.",
+							"properties": {
+								"essential": {
+									"type": "boolean"
+								},
+								"type": {
+									"type": "string",
+									"description": "Type of 'ipco' sections associated to this item (e.g. 'ispe')."
+								}
+							}
+						}
+					},
+					"imageWidth": { 
+						"type": "integer",
+						"minimum": 0,
+						"description": "Number of columns of the image in this item."
+					},
+					"imageHeight": { 
+						"type": "integer",
+						"minimum": 0,
+						"description": "Number of rows of the image in this item."
+					},
+					"bitsPerChannels": {
+						"type": "array",
+						"description": "Number of bits per channels in the images",
+						"items": {
+							"type": "integer",
+							"minimum": 0,
+							"description": "Number of bits per channel in the images."
+						}
+					},
+					"tileWidth": { 
+						"type": "integer",
+						"minimum": 0,
+						"description": "Number of columns of the tiles in this item (from the 'tilC' box)."
+					},
+					"tileHeight": { 
+						"type": "integer",
+						"minimum": 0,
+						"description": "Number of rows of the tiles in this item (from the 'tilC' box)."
+					},
+					"offsetTileLength": { 
+						"type": "integer",
+						"minimum": 0,
+						"description": "Size of the offsets (in bits) written in the header of the 'tili' box in the 'mdat' box  (from the 'tilC' box)."
+					},
+					"sizeTileLength": { 
+						"type": "integer",
+						"minimum": 0,
+						"description": "Size of the sizes (in bits) written in the header of the 'tili' box in the 'mdat' box (from the 'tilC' box)."
+					},
+					"areTileOffsetsSequential": {
+						"type": "boolean",
+						"description": "Are the tiles sequential? (from the 'tilC' box)."
+					},
+					"tileCompressionType":  { 
+						"type": "string",
+						"description": "Type of compression (e.g. 'av01')"
+					},
+					"tileProperties": {
+						"type": "array",
+						"description": "Properties in the 'ipco' associated with this tile.",
+						"items": {
+							"type": "string",
+							"description": "Property in the 'ipco' associated with this tile"
+						}
+					},
+					"matrixWidth": { 
+						"type": "integer",
+						"minimum": 0,
+						"description": "Number of tiles per column in the 'tili' box in the 'mdat' box (calculated)"
+					},
+					"matrixHeight": { 
+						"type": "integer",
+						"minimum": 0,
+						"description": "Number of tiles per row in the 'tili' box in the 'mdat' box (calculated)"
+					},
+					"tiles": {
+						"type": "array",
+						"description": "Position of the tiles in the file.",
+						"items": {
+							"type": "object",
+							"description": "Position of a tile in the file.",
+							"properties": {
+								"offset": {
+									"type": "integer",
+									"minimum": 0,
+									"description": "Offset of the tile from the origin of the 'mdat' box (not from the begining of the file)."
+								},
+								"size": {
+									"type": "integer",
+									"minimum": 0,
+									"description": "Size of the tile in the file in bytes (inside the 'mdat' box)."
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"groups": {
+			"type": "array",
+			"description": "List of the groups in the file based on the 'grpl' box and the subboxes (for the moment only 'pymd').",
+			"items": {
+				"type": "object",
+				"properties": {
+					"start": { 
+						"type": "integer",
+						"minimum": 0,
+						"description": "Offset of the subbox in the full file (starting by 0)"
+					},
+					"size": { 
+						"type": "integer",
+						"minimum": 0,
+						"description": "Size of the subbox in bytes including the size itself and the type"
+					},
+					"type": { 
+						"type": "string",
+						"description": "Four caracters in 4ccc format (for the moment only 'pymd')."
+					},
+					"dataOffset": { 
+						"type": "integer",
+						"minimum": 0,
+						"description": "Offset of the data from the start of the dataview of the subbox (not from the start of the file)."
+					},
+					"version": { 
+						"type": "integer",
+						"minimum": 0,
+						"description": "Version of the subfullbox full box."
+					},
+					"flags": { 
+						"type": "integer",
+						"minimum": 0,
+						"description": "Flags of the subfullbox. Commonly encoded as bits."
+					},
+					"itemId": { 
+						"type": "integer",
+						"minimum": 0,
+						"description": "Group identifier."
+					},
+					"entities": {
+						"type": "array",
+						"description": "Entities in the group.",
+						"items": {
+							"type": "object",
+							"description": "Entity in the group. In case of a 'pymd' box is the levels of the pyramid.",
+							"properties": {
+								"entityId": { 
+									"type": "integer",
+									"minimum": 0,
+									"description": "Entity identifier."
+								},
+								"sizeMultiple": { 
+									"type": "integer",
+									"minimum": 0,
+									"description": "Multiple of the original size of the tile pyramid."
+								}, 
+								"matrixWidth": {
+									"type": "integer",
+									"minimum": 0,
+									"description": "Number of tiles per column in this level of the pyramid."
+								},
+								"matrixHeight": { 
+									"type": "integer",
+									"minimum": 0,
+									"description": "Number of tiles per row in this level of the pyramid."
+								}
+							}
+						}
+					},
+					"tileWidth": { 
+						"type": "integer",
+						"minimum": 0,
+						"description": "Number of columns of the tiles in the pyramid."
+					},
+					"tileHeight": { 
+						"type": "integer",
+						"minimum": 0,
+						"description": "Number of rows of the tiles in the pyramid."
+					}
+				}
 			}
 		},
 		"fileSize": { 
