@@ -519,6 +519,8 @@ async function readSOHItemsDumpURL(url, sidecarUrl, fileInfo, divIdItem, showDum
 					if (itemRel.extents && itemRel.extents.length>0)
 						item.tiles.push({offset: itemRel.extents[0].extentOffset-offsetMdat, size: itemRel.extents[0].extentLength});
 				}
+				if (!item.tiles || item.tiles.length<item.matrixWidth*item.matrixHeight)
+					console.log("This grid item (id:" + item.itemId + ") requires "+item.matrixWidth*item.matrixHeight+" but it only contains " + item.tiles.length + " tiles");
 				if (showDump)
 					showDump(items, divIdItem);		
 			}
@@ -539,6 +541,26 @@ async function readSOHItemsDumpURL(url, sidecarUrl, fileInfo, divIdItem, showDum
 				break;
 			}
 		}
+	}
+	var group, itemId;
+	if (fileInfo.groups && fileInfo.groups.length) {
+		for (var i=0; i<fileInfo.groups.length; i++) {
+			if (fileInfo.groups[i].type=='pymd') {
+				var group=fileInfo.groups[i];
+				for (var j=0; j<items.length; j++) {
+					item=items[j];
+					for (var e=0; e<group.entities.length; e++) {
+						if (group.entities[e].itemId==item.itemId) {
+							item.pyramidId=group.groupId;
+							item.sizeMultiple=group.entities[e].sizeMultiple;
+							break;
+						}
+					}					
+				}
+				if (showDump)
+					showDump(items, divIdItem);
+			}
+		}		
 	}
 	return items;
 }
@@ -579,13 +601,14 @@ async function readSOHGroupsDumpURL(url, fileInfo, divIdGroups, showDump) {
 		if (numEntitiesInGroup) {
 			group.entities=[];
 			for (var i=0; i<numEntitiesInGroup; i++) {
-				group.entities[i]={entityId: dataView.getUint32(groupOffset)};
+				group.entities[i]={itemId: dataView.getUint32(groupOffset)};
 				groupOffset+=4;
 			}
 		}
 		//Details of reading each individual box
-		if (group.type=="pymd")
+		if (group.type=="pymd") {
 			addSOHPymd(group, dataView, groupOffset);
+		}
 
 		groups.push(group);
 		offset+=group.size;
