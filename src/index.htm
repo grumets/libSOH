@@ -108,7 +108,7 @@ async function showBoxes(fileInfo, divId) {
 
 async function showItems(items, divId) {
 	var s="<H3>Items information</H3>";
-	s+="<table border=1><tr><th>Id</th><th>Name</th><th>Type</th><th>Byte ranges</th><th>Witdh & height</th><th>Bits per channel</th><th>Tile width & height</th><th>Matrix width & height</th><th>N of tiles</th><th>Byte range of first tiles from the box origin</th><th>Content ID</th><th>WKT</th></tr>";
+	s+="<table border=1><tr><th>Id</th><th>Name</th><th>Type</th><th>Byte ranges</th><th>Witdh & height</th><th>Bits per channel</th><th>Is tile?</th><th>Tile width & height</th><th>Matrix width & height</th><th>N of tiles</th><th>Byte range of first tiles from the 'mdat' start</th><th>Content ID</th><th>WKT</th></tr>";
 	for (var i=0; i<items.length; i++) {
 		s+="<tr><td>" + items[i].itemId + "</td><td>" + items[i].itemName + "</td><td>" + (items[i].itemType=='mime' ? items[i].contentType : items[i].itemType=='uri ' ? items[i].itemUriType : items[i].itemType) + "</td><td>";
 		if (items[i].extents) {
@@ -130,6 +130,8 @@ async function showItems(items, divId) {
 			}
 			s+="]";
 		}
+		s+="</td><td>";
+		s+=items[i].isTile ? "yes" : "";
 		s+="</td><td>";
 		if (typeof items[i].tileWidth !== "undefined" && typeof items[i].tileHeight !== "undefined") {
 			s+=items[i].tileWidth + ", " + items[i].tileHeight;
@@ -213,8 +215,8 @@ async function showGroups(groups, divId) {
 
 <body>
 	<form>
-	<!--HEIF URL: <input id="heifURL" value="tb21_4x4_grid.heif"/> sidecar: <input id="sidecarURL" value="tb21_4x4_grid.ttl"/>-->
-	HEIF URL: <input id="heifURL" value="rotterdam.avif"/> sidecar: <input id="sidecarURL" value=""/>
+	HEIF URL: <input id="heifURL" value="tb21_4x4_grid.heif"/> sidecar: <input id="sidecarURL" value="tb21_4x4_grid.ttl"/>
+	<!--HEIF URL: <input id="heifURL" value="rotterdam.avif"/> sidecar: <input id="sidecarURL" value=""/>-->
 	<button onClick='return readSOHForm("heifURL", "sidecarURL", "limit", "heifBoxes", "heifItems", "heifGroups");'>read</button>
 	Data max length: <input id="limit" value="20"/><br>
 	<div id="heifBoxes"></div>

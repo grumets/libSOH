@@ -196,9 +196,13 @@
 						"minimum": 0,
 						"description": "Number of tiles per row in the 'tili' box in the 'mdat' box (calculated)"
 					},
+					"isTile": { 
+						"type": "boolean",
+						"description": "This item is a tile related to a 'grid'. It is useful to ignore grid tile items and find images that are complete (not tiled). Remember that 'tili' tiles are not 'items'. Grid tiles are combined in the 'grid' item like the 'tili' tiles are."
+					},
 					"tiles": {
 						"type": "array",
-						"description": "Position of the tiles in the file.",
+						"description": "Position of the tiles in the file. Valid for 'grid' and 'tili'.",
 						"items": {
 							"type": "object",
 							"description": "Position of a tile in the file.",

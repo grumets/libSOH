@@ -223,9 +223,11 @@ async function readSOHItemsDumpURL(url, sidecarUrl, fileInfo, divIdItem, showDum
 				}
  			}
   		}
-		if (showDump)
+		if (showDump && (entryCount<20 || i%Math.trunc(entryCount/20)==0))
 			showDump(items, divIdItem);
 	}
+	if (showDump && entryCount>=20)
+		showDump(items, divIdItem);
 
 	var idat=getIndexSOHBoxType(fileInfo.boxes, "meta/idat");  //in case constructionMethod==1;
 
@@ -302,9 +304,11 @@ async function readSOHItemsDumpURL(url, sidecarUrl, fileInfo, divIdItem, showDum
 			item.extents[j].extentLength=getUIntegerByteSize(dataView, offset, result.lengthSize);
 			offset+=result.lengthSize;
 		} 
-		if (showDump)
+		if (showDump && (result.itemCount<20 || i%Math.trunc(result.itemCount/20)==0))
 			showDump(items, divIdItem);
 	}
+	if (showDump && result.itemCount>=20)
+		showDump(items, divIdItem);
 	
 	var i=getIndexSOHBoxType(fileInfo.boxes, "meta/iprp");
 	if (i==-1)
@@ -396,10 +400,10 @@ async function readSOHItemsDumpURL(url, sidecarUrl, fileInfo, divIdItem, showDum
 			}
 			var sizeMdatTileHeader=(item.offsetTileLength+item.sizeTileLength)/8*nTiles;
 			if (item.extents.length>1 && sizeMdatTileHeader>item.extents[0].extentLength) {
-				console.log("Offsets of thetiles in 'mdat' box are in two or more separate chucks. This is not supported.");
+				console.log("Offsets of the tiles in 'mdat' box are in two or more separate chucks. This is not supported.");
 				sizeMdatTileHeader=item.extents[0].extentLength;
 			}
-			var headerOffsetBuffer=await getURLRange(url, item.extents[0].extentOffset, item.extents[0].extentOffset+sizeMdatTileHeader-1);
+			var headerOffsetBuffer=await getURLBuffer(url, item.extents[0].extentOffset, item.extents[0].extentOffset+sizeMdatTileHeader-1);
 			var headerOffsetDV = new DataView(headerOffsetBuffer);
 			var offsetHeader=0;
 			if (headerOffsetDV) {
@@ -445,14 +449,96 @@ async function readSOHItemsDumpURL(url, sidecarUrl, fileInfo, divIdItem, showDum
 								item.extents[0].extentLength-sizeMdatTileHeader;
   			}
 		}
-	
-		if (showDump)
+		if (showDump && (entryCount<20 || i%Math.trunc(entryCount/20)==0))
 			showDump(items, divIdItem);
 	}
+	if (showDump && entryCount>=20)
+		showDump(items, divIdItem);
+
+	var i=getIndexSOHBoxType(fileInfo.boxes, "meta/iref");
+	if (i!=-1) {
+		//Reading iloc as a FullBox 
+		start=fileInfo.boxes[i].start;
+		result=await readSOHBoxURL(url, start, fileInfo.fileSize);
+		var dvOffset=result.dataOffset;
+		var dataView=result.dataView;
+		result.version=getFullBoxVersion(dataView, 0);
+		result.flags=getFullBoxFlags(dataView, 1);
+		offset=4;
+		var mdat=getIndexSOHBoxType(fileInfo.boxes, "mdat");
+		if (mdat==-1)
+			return items;
+		var offsetMdat=fileInfo.boxes[mdat].start;
+
+		var rel, itemRel, fromItemId, toItemId, referenceCount, offsetRel;
+		while (result.size>offset+result.dataOffset){
+			rel=readSOHBox(dataView, offset, start, fileInfo.fileSize);
+			offsetRel=offset+rel.dataOffset;
+			if (rel.type=='dimg') {
+				if (result.version==0) {
+					fromItemId=dataView.getUint16(offsetRel);
+					offsetRel+=2;
+				} else {
+					fromItemId=dataView.getUint32(offsetRel);
+					offsetRel+=4;
+				}
+				//Look for the itemId.
+				var z=getIndexSOHItemID(items, fromItemId);
+				if (z==-1) {
+					offset+=rel.size;
+					continue;
+				}
+				item=items[z];
+				if (item.itemType!='grid') {
+					offset+=rel.size;
+					continue;
+				}									
+				referenceCount=dataView.getUint16(offsetRel);
+				offsetRel+=2;
+				for (j=0; j<referenceCount; j++) {
+					if (result.version==0) {
+						toItemId=dataView.getUint16(offsetRel);
+						offsetRel+=2;
+					} else {
+						toItemId=dataView.getUint32(offsetRel);
+						offsetRel+=4;
+					}
+					var zz=getIndexSOHItemID(items, toItemId);
+					if (zz==-1)
+						continue;
+					itemRel=items[zz];
+					itemRel.isTile=true;
+					if (!item.tileWidth && !item.tileHeight) {
+						item.tileWidth=itemRel.imageWidth;
+						item.tileHeight=itemRel.imageHeight;
+						item.matrixWidth = Math.trunc((item.imageWidth + item.tileWidth -1)/item.tileWidth);
+						item.matrixHeight = Math.trunc((item.imageHeight + item.tileHeight -1)/item.tileHeight);
+					}
+					if (!item.tiles)
+						item.tiles=[];
+					if (itemRel.extents && itemRel.extents.length>0)
+						item.tiles.push({offset: itemRel.extents[0].extentOffset-offsetMdat, size: itemRel.extents[0].extentLength});
+				}
+				if (showDump)
+					showDump(items, divIdItem);		
+			}
+			offset+=rel.size;
+		}		
+	}
+
 	if (sidecarUrl) {
 		addGeoreferenceToItems(items, await getURLText(sidecarUrl));
 		if (showDump)
 			showDump(items, divIdItem);
+	} else {
+		for (var i=0; i<items.length; i++) {
+			if (items[i].itemType=='mime' && items[i].contentType=="text/turtle" && items[i].extents && items[i].extents.length) {
+				addGeoreferenceToItems(items, await getURLText(url, items[i].extents[0].extentOffset, items[i].extents[0].extentOffset+items[i].extents[0].extentLength-1));
+				if (showDump)
+					showDump(items, divIdItem);
+				break;
+			}
+		}
 	}
 	return items;
 }
@@ -509,20 +595,24 @@ async function readSOHGroupsDumpURL(url, fileInfo, divIdGroups, showDump) {
 	return groups;
 }
 
-async function getURLRange(url, begin, end){
-	var response=await fetch(url, {
-        	headers: {
+async function getURLBuffer(url, begin, end){
+	var options=(begin || end) ? {headers: {
         	    'range': 'bytes='+begin+'-'+end
-	        }
-    	});
+	        }} : null;
+
+	var response=await fetch(url, options);
 	if (!response?.ok) {
 		return;
 	}
-	return await response.arrayBuffer();;
+	return await response.arrayBuffer();
 }
 
-async function getURLText(url){
-	var response=await fetch(url);
+async function getURLText(url, begin, end){
+	var options=(begin || end) ? {headers: {
+        	    'range': 'bytes='+begin+'-'+end
+	        }} : null;
+
+	var response=await fetch(url, options);
 	if (!response?.ok) {
 		return;
 	}	
@@ -558,7 +648,7 @@ async function getBoxLargeSizeURL(url, begin, end, fileSize){
 		console.log("Not enough file size to parse the largesize of the box");
 		return;
 	}	
-	var buffer=await getURLRange(url, begin, end);
+	var buffer=await getURLBuffer(url, begin, end);
 	if(!buffer)
 		return;	
 	var dataView = new DataView(buffer);
@@ -660,7 +750,7 @@ async function readSOHBoxURL(url, start, fileSize, limit){
 		return;
 	}	
 	var begin=start, end=begin+7, dataOffset=8;	
-	var buffer=await getURLRange(url, begin, end);
+	var buffer=await getURLBuffer(url, begin, end);
 	if(!buffer)
 		return;
 	var dataView = new DataView(buffer);
@@ -686,7 +776,7 @@ async function readSOHBoxURL(url, start, fileSize, limit){
 	if (type=="uuid") {
 		begin=end+1;
 		end=begin+15;
-		buffer=await getURLRange(url, begin, end);
+		buffer=await getURLBuffer(url, begin, end);
 		dataView = new DataView(buffer);
 		if(!dataView)
 			return;
@@ -700,7 +790,7 @@ async function readSOHBoxURL(url, start, fileSize, limit){
 
 	begin=start+dataOffset;
 	end=(limit && (size-dataOffset)>limit) ? begin+limit-1 : start+size-1;
-	buffer=await getURLRange(url, begin, end);
+	buffer=await getURLBuffer(url, begin, end);
 	if(!buffer)
 		return;
 	dataView = new DataView(buffer);
