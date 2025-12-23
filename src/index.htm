@@ -9,12 +9,12 @@
 	<script>
 "use strict"
 
-function readSOHForm(divIdURL, divIdSidecarURL, divIdLimit, divIdBoxes, divIdItems, divIdGroups){
-	readSOHFormAsync(divIdURL, divIdSidecarURL, divIdLimit, divIdBoxes, divIdItems, divIdGroups);
+function readSOHForm(divIdURL, divIdSidecarURL, divIdLimit, divIdBoxes, divIdItems, divIdGroups, divIdImages){
+	readSOHFormAsync(divIdURL, divIdSidecarURL, divIdLimit, divIdBoxes, divIdItems, divIdGroups, divIdImages);
 	return false;
 }
 
-async function readSOHFormAsync(divIdURL, divIdSidecarURL, divIdLimit, divIdBoxes, divIdItems, divIdGroups){
+async function readSOHFormAsync(divIdURL, divIdSidecarURL, divIdLimit, divIdBoxes, divIdItems, divIdGroups, divIdImages){
 	var url=document.getElementById(divIdURL).value;
 	var fileInfo=await readSOHBoxDumpURL(url, parseInt(document.getElementById(divIdLimit).value), divIdBoxes, showBoxes);
 	if (!fileInfo)
@@ -26,6 +26,8 @@ async function readSOHFormAsync(divIdURL, divIdSidecarURL, divIdLimit, divIdBoxe
 		fileInfo.groups=await readSOHGroupsDumpURL(url, fileInfo, divIdGroups, showGroups);
 	if (divIdItems)
 		fileInfo.items=await readSOHItemsDumpURL(url, document.getElementById(divIdSidecarURL).value, fileInfo, divIdItems, showItems);
+	if (divIdImages)
+		showSOHImagesItems(url, fileInfo, divIdImages);
 	return fileInfo;
 }
 
@@ -85,15 +87,20 @@ async function showBoxes(fileInfo, divId) {
 	var array=fileInfo.boxes, brand=fileInfo.brand, s="";
 	if (brand) {
 		s+="<H3>Brand information</H3>";
-		s+=brand.majorBrand + ", " + brand.minorVersion;
+		s+="<i>Major grand</i>: <b>" + brand.majorBrand + "</b> version " + brand.minorVersion + "<br>";
 		if (brand.compatibleBrands) {
-			s+=", [";
+			s+="<i>Compatible brands</i>:<br><ul>";
 			for (var i=0; i<brand.compatibleBrands.length; i++) {
-				s+=brand.compatibleBrands[i];
-				if (i+1<brand.compatibleBrands.length)
-					s+=", ";
+				s+="<li><b>"+brand.compatibleBrands[i]+"</b>";
+				for (var j=0; j<brandSOHMeaning.length; j++) {
+					if (brand.compatibleBrands[i]==brandSOHMeaning[j].brand) {
+						s+=" ("+ brandSOHMeaning[j].meaning +")";
+						break;
+					}
+				}
+				s+="<br>";
 			}
-			s+="]";
+			s+="</ul>";
 		}
 	}
 	if (array) {
@@ -203,17 +210,95 @@ async function showGroups(groups, divId) {
 	document.getElementById(divId).innerHTML=s;
 }
 
+function preparecanvasSOHImage(canvasId, profile, width, height) {
+	var s="";
+	if (profile=="rgb3") {  //RGB 24 bits packed {'rgb3', 3, [{4,7},{5,7},{6,7}], 0, 1}
+		s+="<canvas id=\""+canvasId+"\" width=\""+width+"px\" height=\""+height+"px\"></canvas>";
+	}
+	return s;
+}
+
+function showSOHImage(dataView, canvasId, profile, width, height) {
+	if (profile=="rgb3") {  //RGB 24 bits packed {'rgb3', 3, [{4,7},{5,7},{6,7}], 0, 1}
+		var canvas = document.getElementById(canvasId);
+		var ctx = canvas.getContext('2d');
+
+		ctx.clearRect( 0, 0, ctx.canvas.width, ctx.canvas.height);
+
+		var imgData=ctx.createImageData(width, height);
+
+		var data=[];
+		for (var offset=0, j=0; j<height; j++) {
+			for (var i=0; i<width; i++, offset+=3)
+				data.push(dataView.getUint8(offset), dataView.getUint8(offset+1), dataView.getUint8(offset+2), 255)
+		}
+
+		imgData.data.set(data);
+
+		ctx.putImageData(imgData, 0, 0);
+	}
+}
+
+async function showSOHImagesItems(url, fileInfo, divId) {
+	var item, s="", arrayBuffer;
+
+	var mdat=getIndexSOHBoxType(fileInfo.boxes, "mdat");
+	if (mdat==-1)
+		return;
+	var offsetMdat=fileInfo.boxes[mdat].start;
+
+	var s="<H3>Item images</H3>";
+	for (var a=0; a<fileInfo.items.length; a++) {
+		item=fileInfo.items[a];
+		if (!item.isTile) {
+			if (item.tileWidth && item.tileHeight) { //is a grid or tili
+				s+="<table>";
+				for (var j=0; j<item.matrixHeight; j++) {
+					s+="<tr>";
+					for (var i=0; i<item.matrixWidth; i++) {
+						if (item.itemTypeTile=="unci" && item.uncompressProfileTile=="rgb3") {
+							s+="<td>Tile (" + j + "," + i + ")<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"+
+								preparecanvasSOHImage(item.itemId + "_" + j + "_" + i, item.uncompressProfileTile, item.tileWidth, item.tileHeight)+
+								"</td>";
+						}
+					}
+					s+="</tr>";
+				}
+				s+="</table>";
+			}
+		}
+	}
+	document.getElementById(divId).innerHTML=s;
+	for (var a=0; a<fileInfo.items.length; a++) {
+		item=fileInfo.items[a];
+		if (!item.isTile) {
+			if (item.tileWidth && item.tileHeight) { //is a grid or tili
+				for (var j=0; j<item.matrixHeight; j++) {
+					for (var i=0; i<item.matrixWidth; i++) {
+						if (item.itemTypeTile=="unci" && item.uncompressProfileTile=="rgb3") {
+							arrayBuffer=await getURLBuffer(url, offsetMdat+item.tiles[j*item.matrixWidth+i].offset, offsetMdat+item.tiles[j*item.matrixWidth+i].offset+item.tiles[j*item.matrixWidth+i].size-1);
+							showSOHImage(new DataView(arrayBuffer), item.itemId + "_" + j + "_" + i, item.uncompressProfileTile, item.tileWidth, item.tileHeight);
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
 	</script>
 </head>
 
 <body>
 	<form>
-	HEIF URL: <input id="heifURL" value="tb21_4x4_grid.heif"/> sidecar: <input id="sidecarURL" value="tb21_4x4_grid.ttl"/>
+	<!--HEIF URL: <input id="heifURL" value="tb21_4x4_grid.heif"/> sidecar: <input id="sidecarURL" value="tb21_4x4_grid.ttl"/>-->
 	<!--HEIF URL: <input id="heifURL" value="rotterdam.avif"/> sidecar: <input id="sidecarURL" value=""/>-->
-	<button onClick='return readSOHForm("heifURL", "sidecarURL", "limit", "heifBoxes", "heifItems", "heifGroups");'>read</button>
+	HEIF URL: <input id="heifURL" value="tb21-2x4-uncompressed-internal-rdf.heif"/> sidecar: <input id="sidecarURL" value=""/>
+	<button onClick='return readSOHForm("heifURL", "sidecarURL", "limit", "heifBoxes", "heifItems", "heifGroups", "images");'>read</button>
 	Data max length: <input id="limit" value="20"/><br>
 	<div id="heifBoxes"></div>
 	<div id="heifItems"></div>
 	<div id="heifGroups"></div>
+	<div id="images"></div>
 	</form>
 </body>

@@ -21,7 +21,8 @@
 					},
 					"type": { 
 						"type": "string",
-						"description": "Four caracters in 4ccc format or 16 bytes uuid defining the box type (e.g. 'meta')"
+						"minLength": 4,
+						"description": "Four caracters in 4cc format or 16 bytes uuid defining the box type (e.g. 'meta')"
 					},
 					"dataOffset": { 
 						"type": "integer",
@@ -53,8 +54,10 @@
 					},
 					"type": { 
 						"type": "string",
+						"minLength": 4,
+						"maxLength": 4,
 						"enum": ["infe"],
-						"description": "Four caracters in 4ccc format (always 'infe')"
+						"description": "Four caracters in 4cc format (always 'infe')"
 					},
 					"dataOffset": { 
 						"type": "integer",
@@ -83,6 +86,8 @@
 					},
 					"itemType": { 
 						"type": "string",
+						"minLength": 4,
+						"maxLength": 4,
 						"description": "Type of the item in the 'infe' full box (e.g. 'tili')"
 					},
 					"itemName": { 
@@ -205,7 +210,19 @@
 						"type": "integer",
 						"minimum": 0,
 						"description": "Multiple of the original size of the tile pyramid"
-					}, 
+					},
+					"itemTypeTile": {
+						"type": "string",
+						"minLength": 4,
+						"maxLength": 4,
+						"description": "Type of the item of the individual tiles (e.g. 'unci') in a grid (or tili TBD)"
+					},	
+					"uncompressProfileTile": {
+						"type": "string",
+						"minLength": 4,
+						"maxLength": 4,
+						"description": "Type of encoding of uncompressed individual tiles (e.g. 'rgb3') in a grid (or tili TBD)"						
+					},
 					"isTile": { 
 						"type": "boolean",
 						"description": "This item is a tile related to a 'grid'. It is useful to escape the tile items that are already considered in the 'grid' item, and to identify images that are not part of a grid (e.g. not tiled or belonging to a zoom level with only one tile). Remember that 'tili' tiles are not listed as 'items'. Grid tiles are combined in a 'grid' item automaticaly by the library and this way the structure of a 'grid' item is very similar to a 'tilC' item"

@@ -1,5 +1,15 @@
 "use strict"
 
+const brandSOHMeaning=[
+		{brand: "mif1", meaning: "HEIF File: Still imagery version 1"},
+		{brand: "mif2", meaning: "HEIF File: Still imagery version 2"},
+		{brand: "msf1", meaning: "HEIF File: Image sequence version 1"},
+		{brand: "msf2", meaning: "HEIF File: Image sequence version 2"},
+		{brand: "unif", meaning: "Unified handling of IDs across file scoped MetaBox items, tracks, track groups, and entity groups."},
+		{brand: "geo1", meaning: "GIMI File: conformant to version 1 of NGA.STND.0076_1.0"},
+		{brand: "sm01", meaning: "GIMI File with Security XML markings"}
+	];
+
 function readSOHFtypBox(dataView, offset, dataOffset, size) {
 	var result={};
 	result.majorBrand=getSOHString(dataView, offset, offset+4)
@@ -140,6 +150,77 @@ function readSOHTilC(dataView, offset, start, fileSize) {
 	}
 	result.dataOffset+=offset-offsetIni;
 
+	return result;
+}
+
+function readSOHHvcC(dataView, offset, start, fileSize) {
+	var result=readSOHBox(dataView, offset, start, fileSize);
+	offset+=result.dataOffset;
+	//HEVCDecoderConfigurationRecord
+	result.configurationVersion=dataView.getUint8(offset);
+	if (result.configurationVersion!=1) {
+		console.log("Unsuported HvcC configuration version: " + result.configurationVersion);
+		return result;
+	}
+	offset++;
+	result.generalProfileSpace=dataView.getUint8(offset)>>6;
+	result.generalTierFlag=(dataView.getUint8(offset)&0x20)>>5;
+	result.generalProfileIdc=dataView.getUint8(offset)&0x1F;
+	offset++;
+	result.generalProfileCompatibility=dataView.getUint32(offset);
+	offset+=4;
+	//This one is a int of 48 bytes mapped as an array of 6 bytes
+	result.generalConstraintIndicator=[dataView.getUint8(offset), dataView.getUint8(offset+1), dataView.getUint8(offset+2), 
+						dataView.getUint8(offset+3), dataView.getUint8(offset+4), dataView.getUint8(offset+5)];
+	offset+=6;
+	result.generalLevelIdc=dataView.getUint8(offset);
+	offset++;
+	result.minSpatialSegmentationIdc=dataView.getUint16(offset)&0x0FFF;
+	offset+=2;
+	result.parallelismType=dataView.getUint8(offset)&0x03;
+	offset++;
+	result.chromaFormatIdc=dataView.getUint8(offset)&0x03;
+	offset++;
+	result.bitDepthLuma=(dataView.getUint8(offset)&0x07)+8;
+	offset++;
+	result.bitDepthChroma=(dataView.getUint8(offset)&0x07)+8;
+	offset++;
+	result.avgFrameRate=dataView.getUint16(offset);
+	offset+=2;
+	result.constantFrameRate=dataView.getUint8(offset)>>6
+	result.numTemporalLayers=(dataView.getUint8(offset)&0x38)>>3;
+	result.temporalIdNested=(dataView.getUint8(offset)&0x04)>>2;
+	result.lengthSize=(dataView.getUint8(offset)&0x03)+1;
+	offset++;
+	var nArray=dataView.getUint8(offset);
+	offset++;
+	var nNalus, size;
+	result.naluArrays=[];
+	for (var j=0; j<nArray; j++) {
+		result.naluArrays[j]={arrayCompleteness: dataView.getUint8(offset)>>7,
+					naluType: dataView.getUint8(offset)&0x3F}
+		offset++;
+		nNalus=dataView.getUint16(offset);
+		offset+=2;
+		result.naluArrays[j].data=[]
+		for (var i=0; i<nNalus; i++) {
+			size=dataView.getUint16(offset);
+			offset+=2;
+			result.naluArrays[j].data[i]=[]
+			for (var z=0; z<size; z++) {
+				result.naluArrays[j].data[i][z]=dataView.getUint8(offset);
+				offset++;
+			}		
+		}
+	}
+	return result;
+}
+
+function readSOHUncC(dataView, offset, start, fileSize) {
+	var offsetIni=offset;
+	var result=readSOHFullBox(dataView, offset, start, fileSize);
+	offset+=result.dataOffset;
+	result.uncompressProfile=getBoxType(dataView, offset);
 	return result;
 }
 
@@ -337,6 +418,10 @@ async function readSOHItemsDumpURL(url, sidecarUrl, fileInfo, divIdItem, showDum
 			prop=readSOHPixi(dataView, offset, start, fileInfo.fileSize);
 		else if (prop.type=="tilC")
 			prop=readSOHTilC(dataView, offset, start, fileInfo.fileSize);
+		else if (prop.type=="hvcC")
+			prop=readSOHHvcC(dataView, offset, start, fileInfo.fileSize);
+		else if (prop.type=="uncC")
+			prop=readSOHUncC(dataView, offset, start, fileInfo.fileSize);
 		else if (prop.type=="uuid") 
 			prop.contentId=getSOHString(dataView, offset+prop.dataOffset, offset+prop.size);
 
@@ -384,7 +469,7 @@ async function readSOHItemsDumpURL(url, sidecarUrl, fileInfo, divIdItem, showDum
 			propIndex--;
 			if (propIndex<props.length) {
 				item.associations[j].type=props[propIndex].type;
-				if (props[propIndex].type=="ispe" || props[propIndex].type=="pixi" || props[propIndex].type=="uuid" || props[propIndex].type=="tilC")
+				if (props[propIndex].type=="ispe" || props[propIndex].type=="pixi" || props[propIndex].type=="uuid" || props[propIndex].type=="tilC" || props[propIndex].type=="hvcC" || props[propIndex].type=="uncC")
 					copyPropertiesIpcoBox(item, props[propIndex]);
 			}
 		}
@@ -513,6 +598,9 @@ async function readSOHItemsDumpURL(url, sidecarUrl, fileInfo, divIdItem, showDum
 						item.tileHeight=itemRel.imageHeight;
 						item.matrixWidth = Math.trunc((item.imageWidth + item.tileWidth -1)/item.tileWidth);
 						item.matrixHeight = Math.trunc((item.imageHeight + item.tileHeight -1)/item.tileHeight);
+						item.itemTypeTile = itemRel.itemType;
+						if (itemRel.uncompressProfile)
+							item.uncompressProfileTile = itemRel.uncompressProfile;
 					}
 					if (!item.tiles)
 						item.tiles=[];
