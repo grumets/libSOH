@@ -265,6 +265,10 @@ async function showSOHImagesItems(url, fileInfo, divId) {
 					s+="</tr>";
 				}
 				s+="</table>";
+			} else {
+				if (item.itemType=="unci" && item.uncompressProfile=="rgb3") {
+					s+=preparecanvasSOHImage(item.itemId, item.uncompressProfile, item.imageWidth, item.imageHeight);
+				}
 			}
 		}
 	}
@@ -281,6 +285,11 @@ async function showSOHImagesItems(url, fileInfo, divId) {
 						}
 					}
 				}
+			} else {
+				if (item.itemType=="unci" && item.uncompressProfile=="rgb3") {
+					arrayBuffer=await getURLBuffer(url, item.extents[0].extentOffset, item.extents[0].extentOffset+item.extents[0].extentLength-1);
+					showSOHImage(new DataView(arrayBuffer), item.itemId, item.uncompressProfile, item.imageWidth, item.imageHeight);
+				}
 			}
 		}
 	}
@@ -293,7 +302,8 @@ async function showSOHImagesItems(url, fileInfo, divId) {
 	<form>
 	<!--HEIF URL: <input id="heifURL" value="tb21_4x4_grid.heif"/> sidecar: <input id="sidecarURL" value="tb21_4x4_grid.ttl"/>-->
 	<!--HEIF URL: <input id="heifURL" value="rotterdam.avif"/> sidecar: <input id="sidecarURL" value=""/>-->
-	HEIF URL: <input id="heifURL" value="tb21-2x4-uncompressed-internal-rdf.heif"/> sidecar: <input id="sidecarURL" value=""/>
+	<!--HEIF URL: <input id="heifURL" value="tb21-2x4-uncompressed-internal-rdf.heif"/> sidecar: <input id="sidecarURL" value=""/>-->
+	HEIF URL: <input id="heifURL" value="tb21-single-image-uncompressed-internal-rdf.heif"/> sidecar: <input id="sidecarURL" value=""/>
 	<button onClick='return readSOHForm("heifURL", "sidecarURL", "limit", "heifBoxes", "heifItems", "heifGroups", "images");'>read</button>
 	Data max length: <input id="limit" value="20"/><br>
 	<div id="heifBoxes"></div>
