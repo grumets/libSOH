@@ -159,7 +159,7 @@ function readSOHHvcC(dataView, offset, start, fileSize) {
 	//HEVCDecoderConfigurationRecord
 	result.configurationVersion=dataView.getUint8(offset);
 	if (result.configurationVersion!=1) {
-		console.log("Unsuported HvcC configuration version: " + result.configurationVersion);
+		console.log("Unsupported HvcC configuration version: " + result.configurationVersion);
 		return result;
 	}
 	offset++;
@@ -206,7 +206,7 @@ function readSOHHvcC(dataView, offset, start, fileSize) {
 		for (var i=0; i<nNalus; i++) {
 			size=dataView.getUint16(offset);
 			offset+=2;
-			result.naluArrays[j].data[i]=[]
+			result.naluArrays[j].data[i]=[];
 			for (var z=0; z<size; z++) {
 				result.naluArrays[j].data[i][z]=dataView.getUint8(offset);
 				offset++;
@@ -441,9 +441,7 @@ async function readSOHItemsDumpURL(url, sidecarUrl, fileInfo, divIdItem, showDum
 		if (result.version < 1) {
 			itemId=dataView.getUint16(offset);
 			offset+=2;
-		}
-         	else 
-		{
+		} else {
 			itemId=dataView.getUint32(offset);
 			offset+=4;
 		}
@@ -605,7 +603,7 @@ async function readSOHItemsDumpURL(url, sidecarUrl, fileInfo, divIdItem, showDum
 					if (!item.tiles)
 						item.tiles=[];
 					if (itemRel.extents && itemRel.extents.length>0)
-						item.tiles.push({offset: itemRel.extents[0].extentOffset-offsetMdat, size: itemRel.extents[0].extentLength});
+						item.tiles.push({offset: itemRel.extents[0].extentOffset-offsetMdat, size: itemRel.extents[0].extentLength, itemId: itemRel.itemId});
 				}
 				if (!item.tiles || item.tiles.length<item.matrixWidth*item.matrixHeight)
 					console.log("This grid item (id:" + item.itemId + ") requires "+item.matrixWidth*item.matrixHeight+" but it only contains " + item.tiles.length + " tiles");

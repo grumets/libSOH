@@ -5,9 +5,25 @@
 	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
 	<script src="ttl2jsonld.js"></script>  <!-- from: https://github.com/frogcat/ttl2jsonld -->
 	<script src="libSOH.js"></script>
+	<!--script type="text/javascript" src="libde265/libde265.js"></script-->
 
 	<script>
 "use strict"
+
+function IncludeScript(url, late)   //https://stackoverflow.com/questions/950087/how-do-i-include-a-javascript-file-in-another-javascript-file
+{
+	var script = document.createElement("script");  // create a script DOM node
+
+	if (late)
+	{
+		script.setAttributeNode(document.createAttribute("async"));
+		script.setAttributeNode(document.createAttribute("defer"));
+	}
+	script.src = url;  // set its src to the provided URL
+
+	document.head.appendChild(script);  // add it to the end of the head section of the page (could change 'head' to 'body' to add it to the end of the body section instead). 
+}
+IncludeScript("libde265/libde265.js");
 
 function readSOHForm(divIdURL, divIdSidecarURL, divIdLimit, divIdBoxes, divIdItems, divIdGroups, divIdImages){
 	readSOHFormAsync(divIdURL, divIdSidecarURL, divIdLimit, divIdBoxes, divIdItems, divIdGroups, divIdImages);
@@ -210,33 +226,168 @@ async function showGroups(groups, divId) {
 	document.getElementById(divId).innerHTML=s;
 }
 
-function preparecanvasSOHImage(canvasId, profile, width, height) {
+function preparecanvasSOHImage(canvasId, width, height) {
 	var s="";
-	if (profile=="rgb3") {  //RGB 24 bits packed {'rgb3', 3, [{4,7},{5,7},{6,7}], 0, 1}
+	//if (profile=="rgb3") {  //RGB 24 bits packed {'rgb3', 3, [{4,7},{5,7},{6,7}], 0, 1}
 		s+="<canvas id=\""+canvasId+"\" width=\""+width+"px\" height=\""+height+"px\"></canvas>";
-	}
+	//}
 	return s;
 }
 
-function showSOHImage(dataView, canvasId, profile, width, height) {
-	if (profile=="rgb3") {  //RGB 24 bits packed {'rgb3', 3, [{4,7},{5,7},{6,7}], 0, 1}
-		var canvas = document.getElementById(canvasId);
-		var ctx = canvas.getContext('2d');
+function showSOHImage(data, canvasId, width, height) {
 
-		ctx.clearRect( 0, 0, ctx.canvas.width, ctx.canvas.height);
+	var canvas = document.getElementById(canvasId);
+	var ctx = canvas.getContext('2d');
+	ctx.clearRect( 0, 0, ctx.canvas.width, ctx.canvas.height);
+	var imgData=ctx.createImageData(width, height);
+	imgData.data.set(data);
+	ctx.putImageData(imgData, 0, 0);
+}
 
-		var imgData=ctx.createImageData(width, height);
+async function getSOHImage(url, item, offsetMdat, iTile, jTile){
 
-		var data=[];
-		for (var offset=0, j=0; j<height; j++) {
-			for (var i=0; i<width; i++, offset+=3)
-				data.push(dataView.getUint8(offset), dataView.getUint8(offset+1), dataView.getUint8(offset+2), 255)
-		}
+	if(!item)
+		return null;
+	if (item.tileWidth && item.tileHeight)
+		return await getURLBuffer(url, offsetMdat+item.tiles[jTile*item.matrixWidth+iTile].offset, offsetMdat+item.tiles[jTile*item.matrixWidth+iTile].offset+item.tiles[jTile*item.matrixWidth+iTile].size-1);
+	return await getURLBuffer(url, item.extents[0].extentOffset, item.extents[0].extentOffset+item.extents[0].extentLength-1);
+}
 
-		imgData.data.set(data);
-
-		ctx.putImageData(imgData, 0, 0);
+async function getAndshowSOHUnciImage(url, item, offsetMdat, iTile, jTile)
+{
+	var arrayBuffer=null, itemType, uncompressProfile, height, width, canvasId;
+	if (item.tileWidth && item.tileHeight) {
+		itemType=item.itemTypeTile;
+		uncompressProfile=item.uncompressProfileTile;
+		width=item.tileWidth;
+		height=item.tileHeight;
+		canvasId=item.itemId + "_" + jTile + "_" + iTile;		
 	}
+	else {
+		itemType=item.itemType;
+		uncompressProfile=item.uncompressProfile;
+		width=item.imageWidth;
+		height=item.imageHeight;
+		canvasId=item.itemId;
+	}
+	if(itemType!='unci' || uncompressProfile!="rgb3")   //RGB 24 bits packed {'rgb3', 3, [{4,7},{5,7},{6,7}], 0, 1}
+		return;	
+	arrayBuffer=await getSOHImage(url, item, offsetMdat, iTile, jTile);
+	if(!arrayBuffer)
+		return;
+	
+	var dataView=new DataView(arrayBuffer), data=[];
+
+	for (var offset=0, j=0; j<height; j++) {
+		for (var i=0; i<width; i++, offset+=3)
+			data.push(dataView.getUint8(offset), dataView.getUint8(offset+1), dataView.getUint8(offset+2), 255);
+	}
+	showSOHImage(data, canvasId, width, height);
+	return;
+}
+
+function getAndConvertImageYUV2RGB(image){
+
+	var h = image.get_height(), w=image.get_width();
+
+	var canvas = document.getElementById(image.decoder.canvasId);
+	var ctx = canvas.getContext('2d');
+	ctx.clearRect( 0, 0, h, w);
+	var imgData=ctx.createImageData(w, h);
+	var data = imgData.data;
+	for (var i=0; i<w*h; i++) {
+		data[i*4+3] = 255;
+	}
+	image.ImageData=imgData;
+    image.display(image.ImageData, function(display_image_data) {
+        ctx.putImageData(display_image_data, 0, 0);
+    });
+	return image.ImageData.data;
+}
+
+async function getAndshowSOHH265Image(url, item, offsetMdat, iTile, jTile, itemsArray){
+var arrayBuffer=null, itemType, height, width, canvasId, tileItem;
+
+	if(!item)
+		return null;
+	if (item.tileWidth && item.tileHeight){
+		itemType=item.itemTypeTile;
+		width=item.tileWidth;
+		height=item.tileHeight;
+		canvasId=item.itemId + "_" + jTile + "_" + iTile;
+		if(itemsArray && typeof item.tiles[jTile*item.matrixWidth+iTile].itemId !== "undefined"){
+			var indexItem=getIndexSOHItemID(itemsArray, item.tiles[jTile*item.matrixWidth+iTile].itemId)
+			if(indexItem!=-1)
+				tileItem=itemsArray[indexItem];
+			else
+				tileItem=null;
+		}
+		else tileItem=null;
+	}
+	else{
+		itemType=item.itemType;
+		width=item.imageWidth;
+		height=item.imageHeight;
+		canvasId=item.itemId;
+		tileItem=null;
+	}
+	if(itemType!='hvc1')
+		return;
+	arrayBuffer=await getSOHImage(url, item, offsetMdat, iTile, jTile);
+	if(!arrayBuffer)
+		return;
+
+	var dataView=new DataView(arrayBuffer);
+
+	var decoder = new libde265.Decoder(), error;
+	decoder.canvasId=canvasId;
+	decoder.set_image_callback(function(image) {
+		decoder.data=getAndConvertImageYUV2RGB(image);
+		image.free();
+	});		
+	var naluArrays= (item.naluArrays) ? item.naluArrays : (tileItem ? tileItem.naluArrays : null);
+	if(naluArrays)
+	{
+		for (var i_array=0; i_array<naluArrays.length; i_array++)
+		{
+			for (var i_nalu_unit=0; i_nalu_unit<naluArrays[i_array].data.length; i_nalu_unit++)
+			{
+				error=decoder.push_NAL(naluArrays[i_array].data[i_nalu_unit]);
+				if(error)
+					console.log("error" + error);
+			}
+		}
+	}
+	var offset=0, data_length, data_pack, more;
+	while(offset<dataView.byteLength)
+	{
+		data_length=dataView.getUint32(offset);
+		data_pack=[];
+		offset+=4;
+		for (var z=0; z<data_length; z++) {
+			data_pack[z]=dataView.getUint8(offset);
+			offset++;
+		}	
+		error=decoder.push_NAL(data_pack);
+		if(error)
+			console.log("error" + error);
+	}
+	error=decoder.push_end_of_frame();
+	if(error)
+		console.log("error" + error);
+
+	decoder.decode();	
+	decoder.free();
+	return;
+}
+
+
+function isSOHImageTypeSupported(itemType, uncompressProfile)
+{
+	//if( itemType=='j2k1' || itemType=='avc1' || itemType=='jpeg')  // codes supported for Still Imagery	
+	if((itemType=='unci' && uncompressProfile=="rgb3") || itemType=='hvc1')
+		return true;
+	return false;	
 }
 
 async function showSOHImagesItems(url, fileInfo, divId) {
@@ -256,9 +407,10 @@ async function showSOHImagesItems(url, fileInfo, divId) {
 				for (var j=0; j<item.matrixHeight; j++) {
 					s+="<tr>";
 					for (var i=0; i<item.matrixWidth; i++) {
-						if (item.itemTypeTile=="unci" && item.uncompressProfileTile=="rgb3") {
+						if(isSOHImageTypeSupported(item.itemTypeTile, item.uncompressProfileTile))
+						{
 							s+="<td>Tile (" + j + "," + i + ")<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"+
-								preparecanvasSOHImage(item.itemId + "_" + j + "_" + i, item.uncompressProfileTile, item.tileWidth, item.tileHeight)+
+								preparecanvasSOHImage(item.itemId + "_" + j + "_" + i, item.tileWidth, item.tileHeight)+
 								"</td>";
 						}
 					}
@@ -266,9 +418,8 @@ async function showSOHImagesItems(url, fileInfo, divId) {
 				}
 				s+="</table>";
 			} else {
-				if (item.itemType=="unci" && item.uncompressProfile=="rgb3") {
-					s+=preparecanvasSOHImage(item.itemId, item.uncompressProfile, item.imageWidth, item.imageHeight);
-				}
+				if(isSOHImageTypeSupported(item.itemType, item.uncompressProfile))
+					s+=preparecanvasSOHImage(item.itemId,item.imageWidth, item.imageHeight);
 			}
 		}
 	}
@@ -279,17 +430,18 @@ async function showSOHImagesItems(url, fileInfo, divId) {
 			if (item.tileWidth && item.tileHeight) { //is a grid or tili
 				for (var j=0; j<item.matrixHeight; j++) {
 					for (var i=0; i<item.matrixWidth; i++) {
-						if (item.itemTypeTile=="unci" && item.uncompressProfileTile=="rgb3") {
-							arrayBuffer=await getURLBuffer(url, offsetMdat+item.tiles[j*item.matrixWidth+i].offset, offsetMdat+item.tiles[j*item.matrixWidth+i].offset+item.tiles[j*item.matrixWidth+i].size-1);
-							showSOHImage(new DataView(arrayBuffer), item.itemId + "_" + j + "_" + i, item.uncompressProfileTile, item.tileWidth, item.tileHeight);
-						}
+						if(item.itemTypeTile=='unci' && item.uncompressProfileTile=="rgb3")
+							getAndshowSOHUnciImage(url, item, offsetMdat, i, j);
+						else if(item.itemTypeTile=='hvc1')	
+							getAndshowSOHH265Image(url, item, offsetMdat, i, j, fileInfo.items);
+						
 					}
 				}
 			} else {
-				if (item.itemType=="unci" && item.uncompressProfile=="rgb3") {
-					arrayBuffer=await getURLBuffer(url, item.extents[0].extentOffset, item.extents[0].extentOffset+item.extents[0].extentLength-1);
-					showSOHImage(new DataView(arrayBuffer), item.itemId, item.uncompressProfile, item.imageWidth, item.imageHeight);
-				}
+				if(item.itemType=='unci' && item.uncompressProfile=="rgb3")
+					getAndshowSOHUnciImage(url, item, offsetMdat);
+				else if(item.itemType=='hvc1')	
+					getAndshowSOHH265Image(url, item, offsetMdat);				
 			}
 		}
 	}
@@ -303,7 +455,7 @@ async function showSOHImagesItems(url, fileInfo, divId) {
 	<!--HEIF URL: <input id="heifURL" value="tb21_4x4_grid.heif"/> sidecar: <input id="sidecarURL" value="tb21_4x4_grid.ttl"/>-->
 	<!--HEIF URL: <input id="heifURL" value="rotterdam.avif"/> sidecar: <input id="sidecarURL" value=""/>-->
 	<!--HEIF URL: <input id="heifURL" value="tb21-2x4-uncompressed-internal-rdf.heif"/> sidecar: <input id="sidecarURL" value=""/>-->
-	HEIF URL: <input id="heifURL" value="tb21-single-image-uncompressed-internal-rdf.heif"/> sidecar: <input id="sidecarURL" value=""/>
+	HEIF URL: <input id="heifURL" value="tb21-single-image-hevc-internal-rdf.heif"/> sidecar: <input id="sidecarURL" value=""/>
 	<button onClick='return readSOHForm("heifURL", "sidecarURL", "limit", "heifBoxes", "heifItems", "heifGroups", "images");'>read</button>
 	Data max length: <input id="limit" value="20"/><br>
 	<div id="heifBoxes"></div>
