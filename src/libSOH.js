@@ -29,7 +29,7 @@ const mediaHandlerSOHMeaning=[
 
 function readSOHFtypBox(dataView, offset, dataOffset, size) {
 	var result={};
-	result.majorBrand=getSOHString(dataView, offset, offset+4)
+	result.majorBrand=getSOHString(dataView, offset, offset+4);
 	result.minorVersion=dataView.getUint32(4);
 	offset+=8;
 	if (offset<size-dataOffset-3) {
@@ -153,6 +153,26 @@ function readSOHPixi(dataView, offset, start, fileSize) {
 	return result;
 }
 
+function readSOHColr(dataView, offset, start, fileSize) {
+	var result=readSOHBox(dataView, offset, start, fileSize);
+	offset+=result.dataOffset;
+	
+	result.colourType=getSOHString(dataView, offset, offset+4);
+	offset+=4;
+	if (result.colourType == 'nclx') {
+		result.colourPrimaries=dataView.getUint16(offset);
+		result.transferCharacteristics=dataView.getUint16(offset+2);
+		result.matrixCoefficients=dataView.getUint16(offset+4);
+		result.fullRangeFlag=dataView.getUint8(offset+6)>>7;
+    }
+    else if (result.colourType == 'rICC' || result.colourType == 'prof') {
+		result.iccProfile=dataView.getUint8(offset);
+    }
+	return result;
+}
+
+
+
 const possibleOffsetTileLengths=[32, 40, 48, 64];
 const possibleSizeTileLengths=[0, 24, 32, 64];
 function readSOHTilC(dataView, offset, start, fileSize) {
@@ -190,7 +210,6 @@ function readSOHTilC(dataView, offset, start, fileSize) {
 		}
 	}
 	result.dataOffset+=offset-offsetIni;
-
 	return result;
 }
 
@@ -243,7 +262,7 @@ function readSOHHvcC(dataView, offset, start, fileSize) {
 		offset++;
 		nNalus=dataView.getUint16(offset);
 		offset+=2;
-		result.naluArrays[j].data=[]
+		result.naluArrays[j].data=[];
 		for (var i=0; i<nNalus; i++) {
 			size=dataView.getUint16(offset);
 			offset+=2;
@@ -257,12 +276,58 @@ function readSOHHvcC(dataView, offset, start, fileSize) {
 	return result;
 }
 
+
+function readSOCcdef(dataView, offset, start, fileSize) {
+	var result=readSOHBox(dataView, offset, start, fileSize);
+	offset+=result.dataOffset;
+	// cdef (ComponentDefinitionBox)
+	// number of component definitions
+	result.nComp=dataView.getUint16(offset);
+	offset+=2;
+	if(!result.nComp)
+		return result;
+	result.comp=[];
+	for (var i = 0; i < result.nComp; i++) {
+		 // component index (0..N-1)
+		result.comp[i]={index: dataView.getUint16(offset)};
+		offset+=2;
+		// component type
+		result.comp[i].type=dataView.getUint16(offset);
+		/*Type – Component type (16 bits)
+		0	Unspecified
+		1	Y (luma)
+		2	Cb
+		3	Cr
+		4	R
+		5	G
+		6	B
+		7	Alpha
+		8	Opacity*/
+		offset+=2;
+		// component association
+		result.comp[i].assoc=dataView.getUint16(offset);
+		offset+=2;
+	}
+	return result;
+}
+
 function readSOCJ2kH(dataView, offset, start, fileSize) {
-	//··· No tenim cap exemple d'aquesta secció encara.
+	var result=readSOHBox(dataView, offset, start, fileSize);
+	var resultSize=offset+result.size;
+	offset+=result.dataOffset;
+	var boxes;
+	while (resultSize>offset){
+		boxes=readSOHBox(dataView, offset, start, fileSize);
+		if (boxes.type=='cdef') {
+			//read 'cdef'
+			result.cdef=readSOCcdef(dataView, offset, start, fileSize);
+		}
+		offset+=boxes.size;
+	}
+	return result;
 }
 
 function readSOHUncC(dataView, offset, start, fileSize) {
-	var offsetIni=offset;
 	var result=readSOHFullBox(dataView, offset, start, fileSize);
 	offset+=result.dataOffset;
 	result.uncompressProfile=getBoxType(dataView, offset);
@@ -461,12 +526,16 @@ async function readSOHItemsDumpURL(url, sidecarUrl, fileInfo, divIdItem, showDum
 			prop=readSOHIspe(dataView, offset, start, fileInfo.fileSize);
 		else if (prop.type=="pixi")
 			prop=readSOHPixi(dataView, offset, start, fileInfo.fileSize);
+		else if (prop.type=="colr")
+			prop=readSOHColr(dataView, offset, start, fileInfo.fileSize);
 		else if (prop.type=="tilC")
 			prop=readSOHTilC(dataView, offset, start, fileInfo.fileSize);
 		else if (prop.type=="hvcC")
 			prop=readSOHHvcC(dataView, offset, start, fileInfo.fileSize);
 		else if (prop.type=="uncC")
 			prop=readSOHUncC(dataView, offset, start, fileInfo.fileSize);
+		else if (prop.type=="j2kH")
+			prop=readSOCJ2kH(dataView, offset, start, fileInfo.fileSize);
 		else if (prop.type=="uuid") 
 			prop.contentId=getSOHString(dataView, offset+prop.dataOffset, offset+prop.size);
 
