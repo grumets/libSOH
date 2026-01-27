@@ -1,13 +1,30 @@
 "use strict"
 
 const brandSOHMeaning=[
-		{brand: "mif1", meaning: "HEIF File: Still imagery version 1"},
-		{brand: "mif2", meaning: "HEIF File: Still imagery version 2"},
-		{brand: "msf1", meaning: "HEIF File: Image sequence version 1"},
-		{brand: "msf2", meaning: "HEIF File: Image sequence version 2"},
-		{brand: "unif", meaning: "Unified handling of IDs across file scoped MetaBox items, tracks, track groups, and entity groups."},
-		{brand: "geo1", meaning: "GIMI File: conformant to version 1 of NGA.STND.0076_1.0"},
-		{brand: "sm01", meaning: "GIMI File with Security XML markings"}
+		{brand: "miaf", meaning: "File structured in boxes with Metabox and HandlerBox (from ISO 23000-33)"},
+		{brand: "mif1", meaning: "HEIF File: Still imagery version 1 (from HEIF)"},
+		{brand: "mif2", meaning: "HEIF File: Still imagery version 2 (from HEIF)"},
+		{brand: "msf1", meaning: "HEIF File: Image sequence version 1 (from HEIF)"},
+		{brand: "msf2", meaning: "HEIF File: Image sequence version 2 (from HEIF)"},
+		{brand: "isob", meaning: "HEIF File: Media track including Motion Imagery (from ISOBMFF)"},
+		{brand: "unif", meaning: "Unified handling of IDs across file scoped MetaBox items, tracks, track groups, and entity groups (from ISOBMFF)"},
+		{brand: "geo1", meaning: "GIMI File: conformant to version 1 of NGA.STND.0076_1.0 (from NGA.STND.0076-01_v1)"},
+		{brand: "sm01", meaning: "GIMI File with Security XML markings (from NGA.STND.0076-01_v1)"},
+		{brand: "j2ki", meaning: "Image item coding is JPEG2000 or HTJ2K (from 15444-16)"},
+		{brand: "j2is", meaning: "Image sequences are JPEG2000 or HTJ2K (from 15444-16)"},
+		{brand: "heic", meaning: "Image item coding is HEVC (from 23008-2 and -12)"},
+		{brand: "hevc", meaning: "Image sequences are HEVC (from  23008-12 and 14496-15)"},
+		{brand: "heix", meaning: "Image item coding is an extension of HEVC (from 23008-2 and -12)"},
+		{brand: "hevx", meaning: "Image sequences are extension of HEVC (from 23008-12 and 14496-15)"},
+		{brand: "avci", meaning: "Image item coding is an AVC (from 14496-10 and 23008-12)"},
+		{brand: "avcs", meaning: "Image sequences are an AVC (from 23008-12 and 14496-15)"}
+	];
+
+const mediaHandlerSOHMeaning=[
+		{handler: "pict", meaning: "Picture media (defined in: ISO23008-12)"},
+		{handler: "vide", meaning: "Video media (defined in: ISO14496-12)"},
+		{handler: "soud", meaning: "Sound media (defined in: ISO14496-12)"},
+		{handler: "test", meaning: "Text media (defined in: ISO14496-12)"}
 	];
 
 function readSOHFtypBox(dataView, offset, dataOffset, size) {
@@ -26,6 +43,11 @@ function readSOHFtypBox(dataView, offset, dataOffset, size) {
 	return result;
 }
 
+function isBrandPresent(fileInfo, brand) {
+	if (fileInfo.brand.majorBrand==brand)
+		return true;
+	return (fileInfo.brand.compatibleBrands.indexOf(brand)==-1) ? false : true;
+}
 
 async function readSOHFtypBoxURL(url, fileInfo) {
 
@@ -37,6 +59,25 @@ async function readSOHFtypBoxURL(url, fileInfo) {
 	return readSOHFtypBox(result.dataView, 0, result.dataOffset, result.size);
 }
 
+async function readSOHHdlrBox(url, fileInfo) {
+	var i=getIndexSOHBoxType(fileInfo.boxes, "meta/hdlr");
+	if (i==-1)
+		return;
+
+	var start=fileInfo.boxes[i].start;
+	var result=await readSOHBoxURL(url, start, fileInfo.fileSize);
+	//var dvOffset=result.dataOffset;
+	var dataView=result.dataView;
+	//result.version=getFullBoxVersion(dataView, 0);
+	//result.flags=getFullBoxFlags(dataView, 1);
+
+    	//unsigned int(32) pre_defined = 0; //No need to read it
+	var offset=8;
+	var handlerType=getSOHString(dataView, offset, offset+4);
+    	//const unsigned int(32)[3] reserved = 0;   //No need to read it
+    	//string name;  //Not found in the examples
+	return handlerType;
+}
 
 async function readSOHBoxDumpURL(url, limit, divIdBox, showDump) {
 	var start = 0, result, array=[];
@@ -214,6 +255,10 @@ function readSOHHvcC(dataView, offset, start, fileSize) {
 		}
 	}
 	return result;
+}
+
+function readSOCJ2kH(dataView, offset, start, fileSize) {
+	//··· No tenim cap exemple d'aquesta secció encara.
 }
 
 function readSOHUncC(dataView, offset, start, fileSize) {
@@ -669,8 +714,11 @@ async function readSOHGroupsDumpURL(url, fileInfo, divIdGroups, showDump) {
 	var result, resultItem, offset, offsetItem, entryCount;
 
 	var i=getIndexSOHBoxType(fileInfo.boxes, "meta/grpl");
-	if (i==-1)
+	if (i==-1) {
+		if (showDump)
+			showDump(null, divIdGroups);
 		return;
+	}
 
 	//Reading grpl as a Box 
 	var start=fileInfo.boxes[i].start;

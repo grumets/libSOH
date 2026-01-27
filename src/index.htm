@@ -203,6 +203,8 @@ async function showItems(items, divId) {
 }
 
 async function showGroups(groups, divId) {
+var s="";
+    if (group) {
 	var s="<H3>Groups information</H3>";
 	s+="<table border=1><tr><th>Id</th><th>Type</th><th>Tile width</th><th>Tile height</th><th>Tile matrices</th><th>Levels</th></tr>";
 	for (var i=0; i<groups.length; i++) {
@@ -226,17 +228,14 @@ async function showGroups(groups, divId) {
 		} else
 			s+="</td><td>";
 		s+="</td></tr>";
-	}		
+	}
 	s+="</table>";
 	document.getElementById(divId).innerHTML=s;
+    }
 }
 
 function preparecanvasSOHImage(canvasId, width, height) {
-	var s="";
-	//if (profile=="rgb3") {  //RGB 24 bits packed {'rgb3', 3, [{4,7},{5,7},{6,7}], 0, 1}
-		s+="<canvas id=\""+canvasId+"\" width=\""+width+"px\" height=\""+height+"px\"></canvas>";
-	//}
-	return s;
+	return "<canvas id=\""+canvasId+"\" width=\""+width+"px\" height=\""+height+"px\"></canvas>";
 }
 
 function showSOHImage(data, canvasId, width, height) {
@@ -563,17 +562,37 @@ async function showSOHImagesItems(url, fileInfo, divId) {
 	}
 }
 
+function PopulateInputFromSelect(event, heifURLId, sidecarURLId) {
+	event.preventDefault(); // We don't want to submit this form
+
+	var obj=JSON.parse(document.getElementById(heifURLId+"Select").value);
+	document.getElementById(heifURLId).value=obj[heifURLId] ? obj[heifURLId] : "";
+	if (sidecarURLId)
+		document.getElementById(sidecarURLId).value=obj[sidecarURLId] ? obj[sidecarURLId] : "";
+	if (document.getElementById(heifURLId+"Button"))
+		document.getElementById(heifURLId+"Button").click();
+}
+
+
 	</script>
 </head>
 
 <body>
 	<form>
-	<!--HEIF URL: <input id="heifURL" value="tb21_4x4_grid.heif"/> sidecar: <input id="sidecarURL" value="tb21_4x4_grid.ttl"/>-->
-	<!--HEIF URL: <input id="heifURL" value="rotterdam.avif"/> sidecar: <input id="sidecarURL" value=""/>-->
-	<!--HEIF URL: <input id="heifURL" value="tb21-2x4-uncompressed-internal-rdf.heif"/> sidecar: <input id="sidecarURL" value=""/>-->
-	HEIF URL: <input id="heifURL" value="tb21-2x2-j2k-internal-rdf.heif"/> sidecar: <input id="sidecarURL" value=""/>
-	<button onClick='return readSOHForm("heifURL", "sidecarURL", "limit", "heifBoxes", "heifItems", "heifGroups", "images");'>read</button>
+	HEIF/GIMI URL: <input id="heifURL" value=""/> sidecar: <input id="sidecarURL" value=""/>
+	<button id="heifURLButton" onClick='return readSOHForm("heifURL", "sidecarURL", "limit", "heifBoxes", "heifItems", "heifGroups", "images");'>read</button>
 	Data max length: <input id="limit" value="20"/><br>
+	Suggested HEIF/GIMI images:
+	<select id="heifURLSelect" onchange="PopulateInputFromSelect(event, 'heifURL', 'sidecarURL')">
+		<option value="">-- Select one option below --</option>
+		<!--optgroup label="Releated to CREAF projects"-->
+		<option value='{"heifURL": "tb21-single-image-uncompressed-internal-rdf.heif"}'>tb21-single-image-uncompressed-internal-rdf (single file uncompressed)</option>
+		<option value='{"heifURL": "tb21_4x4_grid.heif", "sidecarURL":"tb21_4x4_grid.ttl"}'>tb21_4x4_grid.heif (single 4x4 grid with sidecar)</option>
+		<option value='{"heifURL": "rotterdam.avif"}'>rotterdam.avif (pyramid, image no supported for display)</option>
+		<option value='{"heifURL": "tb21-2x4-uncompressed-internal-rdf.heif"}'>tb21-2x4-uncompressed-internal-rdf.heif</option>
+		<option value='{"heifURL": "tb21-2x2-j2k-internal-rdf.heif"}'>tb21-2x2-j2k-internal-rdf.heif</option>
+		<!--/optgroup-->
+	</select><br>
 	<div id="heifBoxes"></div>
 	<div id="heifItems"></div>
 	<div id="heifGroups"></div>
