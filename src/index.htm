@@ -8,30 +8,36 @@
 	<!--script src="j2k/openjpegwasm.js"></script-->  <!-- from : https://www.npmjs.com/package/@cornerstonejs/codec-openjpeg?activeTab=code and 
 https://github.com/cornerstonejs/codecs/tree/main/packages/openjpeg -->
 	<script src="j2k/openjpegjs.js"></script>
-	<script src="libSOH.js"></script>
 
+	<script src="libSOH.js"></script>
+	
 	<script>
 "use strict"
 
 const GreyScale=0, RGBScale=1, YCbCrScale=2;
 const colorSpaceByDefault=YCbCrScale;
 
+var scaleImageFactor=0.5;
 
-function readSOHForm(divIdURL, divIdSidecarURL, divIdLimit, divIdBoxes, divIdItems, divIdGroups, divIdImages){
-	readSOHFormAsync(divIdURL, divIdSidecarURL, divIdLimit, divIdBoxes, divIdItems, divIdGroups, divIdImages);
+
+function readSOHForm(divIdURL, divIdSidecarURL, divIdLimit, divIdScale, divIdBoxes, divIdItems, divIdGroups, divIdImages){
+	readSOHFormAsync(divIdURL, divIdSidecarURL, divIdLimit, divIdScale, divIdBoxes, divIdItems, divIdGroups, divIdImages);
 	return false;
 }
 
-async function readSOHFormAsync(divIdURL, divIdSidecarURL, divIdLimit, divIdBoxes, divIdItems, divIdGroups, divIdImages){
+async function readSOHFormAsync(divIdURL, divIdSidecarURL, divIdLimit, divIdScale, divIdBoxes, divIdItems, divIdGroups, divIdImages){
 	var url=document.getElementById(divIdURL).value;
 	var fileInfo=await readSOHBoxDumpURL(url, parseInt(document.getElementById(divIdLimit).value), divIdBoxes, showBoxes);
 	if (!fileInfo)
 		return;
+	let scale=document.getElementById(divIdScale).value;
+	if(scale)
+		scaleImageFactor=parseFloat(scale);
 	fileInfo.brand=await readSOHFtypBoxURL(url, fileInfo);
 	if (fileInfo.brand){
 		if (isBrandPresent(fileInfo, 'miaf'))
 			fileInfo.mediaHandler=await readSOHHdlrBox(url, fileInfo);
-		showBoxes(fileInfo, divIdBoxes)
+		showBoxes(fileInfo, divIdBoxes);
 	}
 	if (divIdGroups)
 		fileInfo.groups=await readSOHGroupsDumpURL(url, fileInfo, divIdGroups, showGroups);
@@ -204,48 +210,61 @@ async function showItems(items, divId) {
 
 async function showGroups(groups, divId) {
 var s="";
-    if (group) {
-	var s="<H3>Groups information</H3>";
-	s+="<table border=1><tr><th>Id</th><th>Type</th><th>Tile width</th><th>Tile height</th><th>Tile matrices</th><th>Levels</th></tr>";
-	for (var i=0; i<groups.length; i++) {
-		s+="<tr><td>" + groups[i].groupId + "</td><td>" + groups[i].type + "</td><td>";
-		if (groups[i].tileWidth)
-			s+=groups[i].tileWidth;
-		s+="</td><td>";
-		if (groups[i].tileHeight)
-			s+=groups[i].tileHeight;
-		s+="</td><td>";
-		if (groups[i].entities) {
-			s+=groups[i].entities.length;
-			s+="</td><td><table border=1><tr><th>Size multiple</th><th>Matrix widths</th><th>Matrix heights</th></tr>"
-			for (var j=0; j<groups[i].entities.length; j++) {
-				s+="<tr><td>"+
-					groups[i].entities[j].sizeMultiple+"</td><td>"+
-					groups[i].entities[j].matrixWidth+"</td><td>"+
-					groups[i].entities[j].matrixHeight+"</td></tr>";
-			}
-			s+="</table>"
-		} else
+    if (groups) {
+		var s="<H3>Groups information</H3>";
+		s+="<table border=1><tr><th>Id</th><th>Type</th><th>Tile width</th><th>Tile height</th><th>Tile matrices</th><th>Levels</th></tr>";
+		for (var i=0; i<groups.length; i++) {
+			s+="<tr><td>" + groups[i].groupId + "</td><td>" + groups[i].type + "</td><td>";
+			if (groups[i].tileWidth)
+				s+=groups[i].tileWidth;
 			s+="</td><td>";
-		s+="</td></tr>";
-	}
-	s+="</table>";
-	document.getElementById(divId).innerHTML=s;
+			if (groups[i].tileHeight)
+				s+=groups[i].tileHeight;
+			s+="</td><td>";
+			if (groups[i].entities) {
+				s+=groups[i].entities.length;
+				s+="</td><td><table border=1><tr><th>Size multiple</th><th>Matrix widths</th><th>Matrix heights</th></tr>"
+				for (var j=0; j<groups[i].entities.length; j++) {
+					s+="<tr><td>"+
+						groups[i].entities[j].sizeMultiple+"</td><td>"+
+						groups[i].entities[j].matrixWidth+"</td><td>"+
+						groups[i].entities[j].matrixHeight+"</td></tr>";
+				}
+				s+="</table>"
+			} else
+				s+="</td><td>";
+			s+="</td></tr>";
+		}		
+		s+="</table>";
+		document.getElementById(divId).innerHTML=s;
     }
 }
 
-function preparecanvasSOHImage(canvasId, width, height) {
-	return "<canvas id=\""+canvasId+"\" width=\""+width+"px\" height=\""+height+"px\"></canvas>";
+function preparecanvasSOHImage(canvasId, width, height, scaleFactor) {
+
+	if(!scaleFactor)
+		scaleFactor=1;
+	return "<canvas id=\""+canvasId+"temp\" width=\""+width+"px\" height=\""+height+"px\" style=\"display:none\"></canvas>"+
+		"<canvas id=\""+canvasId+"\" width=\""+width*scaleFactor+"px\" height=\""+height*scaleFactor+"px\"></canvas>";
 }
 
-function showSOHImage(data, canvasId, width, height) {
+function showSOHImage(data, canvasId, width, height, scaleFactor) {
 
+	var canvas_temp=document.getElementById(canvasId+"temp");
+	var ctx_temp = canvas_temp.getContext('2d');
+	ctx_temp.clearRect( 0, 0, ctx_temp.canvas.width, ctx_temp.canvas.height);
+	var imgData=ctx_temp.createImageData(width, height);
+	imgData.data.set(data);
+	ctx_temp.putImageData(imgData, 0, 0);
+	
+	if(!scaleFactor)
+		scaleFactor=1;
+	
 	var canvas = document.getElementById(canvasId);
 	var ctx = canvas.getContext('2d');
-	ctx.clearRect( 0, 0, ctx.canvas.width, ctx.canvas.height);
-	var imgData=ctx.createImageData(width, height);
-	imgData.data.set(data);
-	ctx.putImageData(imgData, 0, 0);
+	ctx.clearRect( 0, 0, ctx.canvas.width*scaleFactor, ctx.canvas.height*scaleFactor);
+	//var imgData=ctx.createImageData(width*scaleFactor, height*scaleFactor);
+	ctx.drawImage(canvas_temp, 0, 0, width*scaleFactor, height*scaleFactor);
 }
 
 async function getSOHImage(url, item, offsetMdat, iTile, jTile){
@@ -258,7 +277,7 @@ async function getSOHImage(url, item, offsetMdat, iTile, jTile){
 }
 
 // Image Item in UNCI
-async function getAndshowSOHUnciImage(url, item, offsetMdat, iTile, jTile)
+async function getAndshowSOHUnciImage(url, item, scaleFactor, offsetMdat, iTile, jTile)
 {
 	var arrayBuffer=null, itemType, uncompressProfile, height, width, canvasId;
 	if (item.tileWidth && item.tileHeight) {
@@ -287,7 +306,7 @@ async function getAndshowSOHUnciImage(url, item, offsetMdat, iTile, jTile)
 		for (var i=0; i<width; i++, offset+=3)
 			data.push(dataView.getUint8(offset), dataView.getUint8(offset+1), dataView.getUint8(offset+2), 255);
 	}
-	showSOHImage(data, canvasId, width, height);
+	showSOHImage(data, canvasId, width, height, scaleFactor);
 	return;
 }
 
@@ -295,23 +314,30 @@ async function getAndshowSOHUnciImage(url, item, offsetMdat, iTile, jTile)
 function getAndConvertImageYUV2RGB(image){
 
 	var h = image.get_height(), w=image.get_width();
-
-	var canvas = document.getElementById(image.decoder.canvasId);
-	var ctx = canvas.getContext('2d');
-	ctx.clearRect( 0, 0, h, w);
-	var imgData=ctx.createImageData(w, h);
+	
+	var canvas_temp = document.getElementById(image.decoder.canvasId+"temp");
+	var ctx_temp = canvas_temp.getContext('2d');
+	ctx_temp.clearRect( 0, 0, h, w);
+	var imgData=ctx_temp.createImageData(w, h);
 	var data = imgData.data;
 	for (var i=0; i<w*h; i++) {
 		data[i*4+3] = 255;
 	}
 	image.ImageData=imgData;
     image.display(image.ImageData, function(display_image_data) {
-        ctx.putImageData(display_image_data, 0, 0);
+        ctx_temp.putImageData(display_image_data, 0, 0);
+		if(!image.decoder.scaleFactor)
+			image.decoder.scaleFactor=1;
+	
+		var canvas = document.getElementById(image.decoder.canvasId);
+		var ctx = canvas.getContext('2d');
+		ctx.clearRect( 0, 0, ctx.canvas.width*image.decoder.scaleFactor, ctx.canvas.height*image.decoder.scaleFactor);
+		ctx.drawImage(canvas_temp, 0, 0, w*image.decoder.scaleFactor, h*image.decoder.scaleFactor);
     });
 	return image.ImageData.data;
 }
 
-async function getAndshowSOHH265Image(url, item, offsetMdat, iTile, jTile, itemsArray){
+async function getAndshowSOHH265Image(url, item, scaleFactor, offsetMdat, iTile, jTile, itemsArray){
 var arrayBuffer=null, itemType, height, width, canvasId, tileItem;
 
 	if(!item)
@@ -347,6 +373,7 @@ var arrayBuffer=null, itemType, height, width, canvasId, tileItem;
 
 	var decoder = new libde265.Decoder(), error;
 	decoder.canvasId=canvasId;
+	decoder.scaleFactor=scaleFactor;
 	decoder.set_image_callback(function(image) {
 		decoder.data=getAndConvertImageYUV2RGB(image);
 		image.free();
@@ -417,7 +444,7 @@ function ycbcrToRgb(y, cb, cr) {
 }
 
 
-async function getAndshowSOHJ2KImage(url, item, offsetMdat, iTile, jTile)
+async function getAndshowSOHJ2KImage(url, item, scaleFactor, offsetMdat, iTile, jTile)
 {
 	var arrayBuffer=null, itemType, uncompressProfile, height, width, canvasId, colorSpace=colorSpaceByDefault;
 
@@ -488,11 +515,13 @@ async function getAndshowSOHJ2KImage(url, item, offsetMdat, iTile, jTile)
 					}
 				}
 			}
-			showSOHImage(data, canvasId, frameInfo.width, frameInfo.height);	
+			showSOHImage(data, canvasId, frameInfo.width, frameInfo.height, scaleFactor);	
 		}
 	}
     J2KDecoder.delete();
 }
+
+
 function isSOHImageTypeSupported(itemType, uncompressProfile)
 {
 	//if(itemType=='avc1' || itemType=='jpeg')  // codes supported for Still Imagery	
@@ -521,7 +550,7 @@ async function showSOHImagesItems(url, fileInfo, divId) {
 						if(isSOHImageTypeSupported(item.itemTypeTile, item.uncompressProfileTile))
 						{
 							s+="<td>Tile (" + j + "," + i + ")<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"+
-								preparecanvasSOHImage(item.itemId + "_" + j + "_" + i, item.tileWidth, item.tileHeight)+
+								preparecanvasSOHImage(item.itemId + "_" + j + "_" + i, item.tileWidth, item.tileHeight, scaleImageFactor)+
 								"</td>";
 						}
 					}
@@ -530,7 +559,7 @@ async function showSOHImagesItems(url, fileInfo, divId) {
 				s+="</table>";
 			} else {
 				if(isSOHImageTypeSupported(item.itemType, item.uncompressProfile))
-					s+=preparecanvasSOHImage(item.itemId,item.imageWidth, item.imageHeight);
+					s+=preparecanvasSOHImage(item.itemId,item.imageWidth, item.imageHeight, scaleImageFactor);
 			}
 		}
 	}
@@ -542,21 +571,20 @@ async function showSOHImagesItems(url, fileInfo, divId) {
 				for (var j=0; j<item.matrixHeight; j++) {
 					for (var i=0; i<item.matrixWidth; i++) {
 						if(item.itemTypeTile=='unci' && item.uncompressProfileTile=="rgb3")
-							getAndshowSOHUnciImage(url, item, offsetMdat, i, j);
+							getAndshowSOHUnciImage(url, item, scaleImageFactor, offsetMdat, i, j);
 						else if(item.itemTypeTile=='hvc1')	
-							getAndshowSOHH265Image(url, item, offsetMdat, i, j, fileInfo.items);
-						
+							getAndshowSOHH265Image(url, item, scaleImageFactor, offsetMdat, i, j, fileInfo.items);
 						else if(item.itemTypeTile=='j2k1')	
-							getAndshowSOHJ2KImage(url, item, offsetMdat, i, j);
+							getAndshowSOHJ2KImage(url, item, scaleImageFactor, offsetMdat, i, j);
 					}
 				}
 			} else {
 				if(item.itemType=='unci' && item.uncompressProfile=="rgb3")
-					getAndshowSOHUnciImage(url, item);
+					getAndshowSOHUnciImage(url, item, scaleImageFactor);
 				else if(item.itemType=='hvc1')	
-					getAndshowSOHH265Image(url, item);		
+					getAndshowSOHH265Image(url, item, scaleImageFactor);		
 				else if(item.itemType=='j2k1')	
-					getAndshowSOHJ2KImage(url, item);			
+					getAndshowSOHJ2KImage(url, item, scaleImageFactor);			
 			}
 		}
 	}
@@ -572,16 +600,14 @@ function PopulateInputFromSelect(event, heifURLId, sidecarURLId) {
 	if (document.getElementById(heifURLId+"Button"))
 		document.getElementById(heifURLId+"Button").click();
 }
-
-
 	</script>
 </head>
 
 <body>
 	<form>
 	HEIF/GIMI URL: <input id="heifURL" value=""/> sidecar: <input id="sidecarURL" value=""/>
-	<button id="heifURLButton" onClick='return readSOHForm("heifURL", "sidecarURL", "limit", "heifBoxes", "heifItems", "heifGroups", "images");'>read</button>
-	Data max length: <input id="limit" value="20"/><br>
+	<button id="heifURLButton" onClick='return readSOHForm("heifURL", "sidecarURL", "limit", "scale", "heifBoxes", "heifItems", "heifGroups", "images");'>read</button>
+	Data max length: <input id="limit" value="20"/>	Scale image factor: <input id="scale" value="0.5"/><br>
 	Suggested HEIF/GIMI images:
 	<select id="heifURLSelect" onchange="PopulateInputFromSelect(event, 'heifURL', 'sidecarURL')">
 		<option value="">-- Select one option below --</option>
