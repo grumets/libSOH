@@ -28,11 +28,8 @@ async function readSOHFormAsync(divIdURL, divIdSidecarURL, divIdLimit, divIdBoxe
 	if (!fileInfo)
 		return;
 	fileInfo.brand=await readSOHFtypBoxURL(url, fileInfo);
-	if (fileInfo.brand){
-		if (isBrandPresent(fileInfo, 'miaf'))
-			fileInfo.mediaHandler=await readSOHHdlrBox(url, fileInfo);
+	if (fileInfo.brand)
 		showBoxes(fileInfo, divIdBoxes)
-	}
 	if (divIdGroups)
 		fileInfo.groups=await readSOHGroupsDumpURL(url, fileInfo, divIdGroups, showGroups);
 	if (divIdItems)
@@ -112,16 +109,6 @@ async function showBoxes(fileInfo, divId) {
 				s+="<br>";
 			}
 			s+="</ul>";
-		}
-	}
-	if (fileInfo.mediaHandler) {
-		s+="<H3>Media Handler</H3>";
-		s+="<i>Media Handler</i>: <b>" + fileInfo.mediaHandler + "</b>";
-		for (var j=0; j<mediaHandlerSOHMeaning.length; j++) {
-			if (fileInfo.mediaHandler==mediaHandlerSOHMeaning[j].handler) {
-				s+=" ("+ mediaHandlerSOHMeaning[j].meaning +")";
-				break;
-			}
 		}
 	}
 	if (array) {

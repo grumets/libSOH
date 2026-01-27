@@ -76,8 +76,7 @@
 					},
 					"itemId": { 
 						"type": "integer",
-						"minimum": 0,
-						"description": "Item identifier (in the 'infe' full box)"
+						"description": "Item identifier (in the 'infe' full box), Commonly starting by 1"
 					},
 					"itemProtectionIndex": { 
 						"type": "integer",
@@ -243,6 +242,11 @@
 									"type": "integer",
 									"minimum": 0,
 									"description": "Size of the tile in the file in bytes (inside the 'mdat' box)"
+								},
+								"itemId":  {
+									"type": "integer",
+									"minimum": 0,
+									"description": "Reference to an Item identifier (in the 'infe' full box), Commonly starting by 1. Identical to for all tiles in 'tili' and different for each tile in 'grid'"
 								}
 							}
 						}
