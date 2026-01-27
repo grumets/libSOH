@@ -526,6 +526,7 @@ async function readSOHItemsDumpURL(url, sidecarUrl, fileInfo, divIdItem, showDum
 							break;
 					}
 					offsetHeader+=item.sizeTileLength/8;
+					item.tiles[j].itemId=item.itemId;  
 				}
 				if (item.sizeTileLength==0 && item.areTileOffsetsSequential)
 					item.tiles[nTiles-1].size=(nTiles>1) ? item.extents[0].extentOffset+item.extents[0].extentLength-item.tiles[nTiles-2].offset : //The end of the box minus the last offset
