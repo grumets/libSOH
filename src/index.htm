@@ -14,7 +14,7 @@ https://github.com/cornerstonejs/codecs/tree/main/packages/openjpeg -->
 	<script>
 "use strict"
 
-const GreyScale=0, RGBScale=1, YCbCrScale=2;
+const GreyScale=1, RGBScale=2, YCbCrScale=3;
 const colorSpaceByDefault=YCbCrScale;
 
 var scaleImageFactor=0.5;
@@ -236,8 +236,8 @@ var s="";
 			s+="</td></tr>";
 		}		
 		s+="</table>";
+		document.getElementById(divId).innerHTML=s;
     }
-	document.getElementById(divId).innerHTML=s;
 }
 
 function preparecanvasSOHImage(canvasId, width, height, scaleFactor) {
@@ -444,9 +444,9 @@ function ycbcrToRgb(y, cb, cr) {
 }
 
 
-async function getAndshowSOHJ2KImage(url, item, scaleFactor, offsetMdat, iTile, jTile)
+async function getAndshowSOHJ2KImage(url, item, scaleFactor, offsetMdat, iTile, jTile, itemsArray)
 {
-	var arrayBuffer=null, itemType, uncompressProfile, height, width, canvasId, colorSpace=colorSpaceByDefault;
+	var arrayBuffer=null, itemType, tileItem, height, width, canvasId, colorSpace, iR,iB,iG,iY,iCb,iCr,iA;
 
 	if(!item)
 		return null;
@@ -455,21 +455,21 @@ async function getAndshowSOHJ2KImage(url, item, scaleFactor, offsetMdat, iTile, 
 		width=item.tileWidth;
 		height=item.tileHeight;
 		canvasId=item.itemId + "_" + jTile + "_" + iTile;
-		/*if(itemsArray && typeof item.tiles[jTile*item.matrixWidth+iTile].itemId !== "undefined"){
+		if(itemsArray && typeof item.tiles[jTile*item.matrixWidth+iTile].itemId !== "undefined"){
 			var indexItem=getIndexSOHItemID(itemsArray, item.tiles[jTile*item.matrixWidth+iTile].itemId)
 			if(indexItem!=-1)
 				tileItem=itemsArray[indexItem];
 			else
 				tileItem=null;
 		}
-		else tileItem=null;*/
+		else tileItem=null;
 	}
 	else{
 		itemType=item.itemType;
 		width=item.imageWidth;
 		height=item.imageHeight;
 		canvasId=item.itemId;
-		/*tileItem=null;*/
+		tileItem=null;
 	}
 	if(itemType!='j2k1')
 		return;
@@ -492,11 +492,47 @@ async function getAndshowSOHJ2KImage(url, item, scaleFactor, offsetMdat, iTile, 
 	const frameInfo = J2KDecoder.getFrameInfo(); // width/height will be wrong if using decodeSubResolution
 	// const interleaveMode = 2;
 
-    // Show the image in the canvas
+    // Trying to determine the correct colorSpace
+	if(frameInfo.componentCount>=3)
+	{
+		colorSpace=0;
+		iR=iB=iG=iY=iCb=iCr=iA=-1;
+		var cdef= (item.cdef) ? item.cdef : (tileItem ? tileItem.cdef : null);
+		if(cdef)
+		{
+			for(i=0;i<cdef.nComp; i++){
+				if(cdef.result.comp[i].type==1)
+					iY=cdef.result.comp[i].index;
+				else if(cdef.result.comp[i].type==2)
+					iCb=cdef.result.comp[i].index;
+				else if(cdef.result.comp[i].type==3)
+					iCr=cdef.result.comp[i].index;
+				else if(cdef.result.comp[i].type==4)
+					iR=cdef.result.comp[i].index;
+				else if(cdef.result.comp[i].type==5)
+					iG=cdef.result.comp[i].index;
+				else if(cdef.result.comp[i].type==6)
+					iB=cdef.result.comp[i].index;
+				else if(cdef.result.comp[i].type==7)
+					iA=cdef.result.comp[i].index;
+			}
+		}
+		if(iR!=-1 && iA==-1)
+			colorSpace=RGBScale;
+		else if (iR!=-1 && iA!=-1)
+			colorSpace=RGBAScale;
+		else if (iY!=-1 && iA!=-1)
+			colorSpace=YCbCrAScale;
+		else //if(iY!=-1 && iA==-1)
+			colorSpace=YCbCrScale;
+	}
+	else
+		colorSpace=GreyScale;
+	// Show the image in the canvas
 	if(decodedBuffer) {	
 		const image=getPixelDataFromJ2KDecoded(frameInfo, decodedBuffer);
 		if(image){
-			var RGB, grey_value, data=[], bytesPerSample = (frameInfo.bitsPerSample <= 8) ? 1 : 2, 	pixelsPerChannel = frameInfo.width * frameInfo.height* bytesPerSample, shift=(frameInfo.bitsPerSample > 8) ? 8 : 0, inOffset=0;
+			var RGB, one_color, grey_value, data=[], bytesPerSample = (frameInfo.bitsPerSample <= 8) ? 1 : 2, 	pixelsPerChannel = frameInfo.width * frameInfo.height* bytesPerSample, shift=(frameInfo.bitsPerSample > 8) ? 8 : 0, inOffset=0;
 			for(var y=0; y < frameInfo.height; y++) {
 				for (var x = 0; x < frameInfo.width; x++) {
 					if (frameInfo.componentCount==1 || colorSpace==GreyScale){
@@ -507,11 +543,42 @@ async function getAndshowSOHJ2KImage(url, item, scaleFactor, offsetMdat, iTile, 
 						else
 							inOffset+=3;
 					}
-					else if (frameInfo.componentCount==3 && colorSpace==RGBScale)
-						data.push(image[inOffset++] >> shift, image[inOffset++] >> shift, image[inOffset++] >> shift, 255);
-					else if (frameInfo.componentCount==3 && colorSpace==YCbCrScale) {
-						RGB=ycbcrToRgb(image[inOffset++] >> shift, image[inOffset++] >> shift, image[inOffset++] >> shift);
-						data.push(RGB[0], RGB[1], RGB[2], 255); 
+					else if (frameInfo.componentCount==3)
+					{
+						one_color=[];
+						one_color.push(image[inOffset++] >> shift, image[inOffset++] >> shift, image[inOffset++] >> shift);
+						if(colorSpace==RGBScale){
+							if(iR!=-1 && iG!=-1 && iB!=-1)
+								data.push(one_color[iR], one_color[iG], one_color[iB], 255);
+							else
+								data.push(one_color[0], one_color[1], one_color[2], 255);
+						}
+						else if(colorSpace==YCbCrScale){
+							if(iY!=-1 && iCb!=-1 && iCr!=-1)
+								RGB=ycbcrToRgb(one_color[iY], one_color[iCb], one_color[iCr]);
+							else
+								RGB=ycbcrToRgb(one_color[0], one_color[1], one_color[2]);
+							data.push(RGB[0], RGB[1], RGB[2], 255);
+						}
+					}
+					else if (frameInfo.componentCount==4)
+					{
+						one_color=[];
+						one_color.push(image[inOffset++] >> shift, image[inOffset++] >> shift, image[inOffset++] >> shift, image[inOffset++] >> shift);
+						if(colorSpace==RGBAScale){
+							if(iR!=-1 && iG!=-1 && iB!=-1)
+								data.push(one_color[iR], one_color[iG], one_color[iB]);
+							else
+								data.push(one_color[0], one_color[1], one_color[2]);
+							data.push(iA!=-1 ? one_color[iA] : one_color[3]);
+						}
+						else if(colorSpace==YCbCrAScale){
+							if(iY!=-1 && iCb!=-1 && iCr!=-1)
+								RGB=ycbcrToRgb(one_color[iY], one_color[iCb], one_color[iCr]);
+							else
+								RGB=ycbcrToRgb(one_color[0], one_color[1], one_color[2]);
+							data.push(RGB[0], RGB[1], RGB[2], iA!=-1 ? one_color[iA] : one_color[3]);
+						}
 					}
 				}
 			}
@@ -575,7 +642,7 @@ async function showSOHImagesItems(url, fileInfo, divId) {
 						else if(item.itemTypeTile=='hvc1')	
 							getAndshowSOHH265Image(url, item, scaleImageFactor, offsetMdat, i, j, fileInfo.items);
 						else if(item.itemTypeTile=='j2k1')	
-							getAndshowSOHJ2KImage(url, item, scaleImageFactor, offsetMdat, i, j);
+							getAndshowSOHJ2KImage(url, item, scaleImageFactor, offsetMdat, i, j, fileInfo.items);
 					}
 				}
 			} else {

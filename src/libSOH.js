@@ -302,7 +302,8 @@ function readSOCcdef(dataView, offset, start, fileSize) {
 		5	G
 		6	B
 		7	Alpha
-		8	Opacity*/
+		8	Opacity
+		9   Deepht*/
 		offset+=2;
 		// component association
 		result.comp[i].assoc=dataView.getUint16(offset);
