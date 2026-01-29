@@ -1133,7 +1133,7 @@ HEAP32 = new Int32Array(buffer);
 HEAPU8 = new Uint8Array(buffer);
 HEAPU16 = new Uint16Array(buffer);
 HEAPU32 = new Uint32Array(buffer);
-HEAPF32 = new Float32Array(buffer);7
+HEAPF32 = new Float32Array(buffer);
 HEAPF64 = new Float64Array(buffer);
 
 // Endianness check (note: assumes compiler arch was little-endian)
