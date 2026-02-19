@@ -79,6 +79,30 @@ async function readSOHHdlrBox(url, fileInfo) {
 	return handlerType;
 }
 
+async function readSOHPitmBoxURL(url, fileInfo) {
+	var i=getIndexSOHBoxType(fileInfo.boxes, "meta/pitm");
+	if (i==-1)
+		return null;
+
+	var start=fileInfo.boxes[i].start;
+	
+	var result=await readSOHBoxURL(url, start, fileInfo.fileSize);
+	var dataView=result.dataView;
+	//var dvOffset=result.dataOffset;
+	//result=readSOHFullBox(dataView, dvOffset, start, fileInfo.fileSize);
+	result.version=getFullBoxVersion(dataView, 0);
+	result.flags=getFullBoxFlags(dataView, 1);
+
+	if (result.version == 0) {
+       //unsigned int(16) item_ID;
+	   result.primaryItemId=dataView.getUint16(4);
+    } else if (result.version == 1) {
+        //unsigned int(32) item_ID;
+		result.primaryItemId=dataView.getUint32(4);
+    }
+	return result;
+}
+
 async function readSOHBoxDumpURL(url, limit, divIdBox, showDump) {
 	var start = 0, result, array=[];
 	var fileSize=await getURLSize(url);
@@ -729,7 +753,6 @@ async function readSOHItemsDumpURL(url, sidecarUrl, fileInfo, divIdItem, showDum
 			offset+=rel.size;
 		}		
 	}
-
 	if (sidecarUrl) {
 		addGeoreferenceToItems(items, await getURLText(sidecarUrl));
 		if (showDump)
@@ -737,6 +760,7 @@ async function readSOHItemsDumpURL(url, sidecarUrl, fileInfo, divIdItem, showDum
 	} else {
 		for (var i=0; i<items.length; i++) {
 			if (items[i].itemType=='mime' && items[i].contentType=="text/turtle" && items[i].extents && items[i].extents.length) {
+				fileInfo.hasTtlMd=true;
 				addGeoreferenceToItems(items, await getURLText(url, items[i].extents[0].extentOffset, items[i].extents[0].extentOffset+items[i].extents[0].extentLength-1));
 				if (showDump)
 					showDump(items, divIdItem);
