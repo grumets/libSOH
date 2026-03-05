@@ -384,13 +384,13 @@ function readSOHUncC(dataView, offset, start, fileSize) {
 	offset+=4;
 	result.samplingType=[];
 	result.componentIndex=[];
-	result.bitDepthMinusOne=[];
+	result.componentBitDepthMinusOne=[];
 	result.componentFormat=[];
 	result.componentAlignSize=[];
 	for(var i=0; i<result.componentCount; i++)
 	{
 		result.componentIndex[i]=dataView.getUint16(offset);
-		result.bitDepthMinusOne[i]=dataView.getUint8(offset+2);
+		result.componentBitDepthMinusOne[i]=dataView.getUint8(offset+2);
 		result.componentFormat[i]=dataView.getUint8(offset+3);
 		result.componentAlignSize[i]=dataView.getUint8(offset+4);
     }
