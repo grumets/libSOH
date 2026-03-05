@@ -86,6 +86,7 @@ async function readSOHPitmBoxURL(url, fileInfo) {
 
 	var start=fileInfo.boxes[i].start;
 	
+	
 	var result=await readSOHBoxURL(url, start, fileInfo.fileSize);
 	var dataView=result.dataView;
 	//var dvOffset=result.dataOffset;
@@ -251,6 +252,7 @@ function readSOHHvcC(dataView, offset, start, fileSize) {
 	result.generalTierFlag=(dataView.getUint8(offset)&0x20)>>5;
 	result.generalProfileIdc=dataView.getUint8(offset)&0x1F;
 	offset++;
+	
 	result.generalProfileCompatibility=dataView.getUint32(offset);
 	offset+=4;
 	//This one is a int of 48 bytes mapped as an array of 6 bytes
@@ -352,11 +354,73 @@ function readSOCJ2kH(dataView, offset, start, fileSize) {
 	return result;
 }
 
-function readSOHUncC(dataView, offset, start, fileSize) {
+function readSOHCmpC(dataView, offset, start, fileSize) {
+	// cmpC CompressionConfigurationBox 
 	var result=readSOHFullBox(dataView, offset, start, fileSize);
 	offset+=result.dataOffset;
-	result.uncompressProfile=getBoxType(dataView, offset);
+	result.compressionType=getBoxType(dataView, offset);
+	
+	//unsigned int(1) must_decompress_individual_entities can_decompress_contiguous_ranges;
+	//unsigned int(7) compressed_range_typecompressed_entity_type;
 	return result;
+}
+
+
+function readSOHUncC(dataView, offset, start, fileSize) {
+	//uncC UncompressedFrameConfigBox
+	var result=readSOHFullBox(dataView, offset, start, fileSize);
+	offset+=result.dataOffset;	
+	if(result.version==1) // there is only uncompressProfile
+	{
+		result.uncompressProfile=getBoxType(dataView, offset);
+		return result;
+	}
+	//version==0 
+	result.uncompressProfile=dataView.getUint32(offset); 
+	if(result.uncompressProfile>0)		
+		result.uncompressProfile=getBoxType(dataView, offset);
+	offset+=4;
+	result.componentCount=dataView.getUint32(offset);
+	offset+=4;
+	result.samplingType=[];
+	result.componentIndex=[];
+	result.bitDepthMinusOne=[];
+	result.componentFormat=[];
+	result.componentAlignSize=[];
+	for(var i=0; i<result.componentCount; i++)
+	{
+		result.componentIndex[i]=dataView.getUint16(offset);
+		result.bitDepthMinusOne[i]=dataView.getUint8(offset+2);
+		result.componentFormat[i]=dataView.getUint8(offset+3);
+		result.componentAlignSize[i]=dataView.getUint8(offset+4);
+    }
+	offset+=5;
+	result.samplingType=dataView.getUint8(offset);
+	offset++;
+	result.interleaveType=dataView.getUint8(offset);
+	offset++;
+	result.blockSize=dataView.getUint8(offset);
+	offset++;
+	result.componentsLittleEndian=(dataView.getUint8(offset)>>7)&1;
+	result.blockPadLsb=(dataView.getUint8(offset)>>6)&1;
+	result.blockLittleEndian=(dataView.getUint8(offset)>>5)&1;
+	result.blockReversed=(dataView.getUint8(offset)>>4)&1;
+	result.padUnknown=(dataView.getUint8(offset)>>3)&1;
+	//bit(3) reserved = 0;
+	offset++;
+
+	result.pixelSize=dataView.getUint32(offset);
+	offset+=4;
+	result.rowAlignSize=dataView.getUint32(offset);
+	offset+=4;
+	result.tileAlignSize=dataView.getUint32(offset);
+	offset+=4;
+	result.numTileColsMinusOne=dataView.getUint32(offset);
+	offset+=4;
+	result.numTileRowsMinusOne=dataView.getUint32(offset);
+	
+	return result;
+	
 }
 
 function copyPropertiesIpcoBox(item, prop) {
@@ -559,6 +623,8 @@ async function readSOHItemsDumpURL(url, sidecarUrl, fileInfo, divIdItem, showDum
 			prop=readSOHHvcC(dataView, offset, start, fileInfo.fileSize);
 		else if (prop.type=="uncC")
 			prop=readSOHUncC(dataView, offset, start, fileInfo.fileSize);
+		else if (prop.type=="cmpC")
+			prop=readSOHCmpC(dataView, offset, start, fileInfo.fileSize);
 		else if (prop.type=="j2kH")
 			prop=readSOCJ2kH(dataView, offset, start, fileInfo.fileSize);
 		else if (prop.type=="uuid") 
