@@ -89,6 +89,12 @@
 						"maxLength": 4,
 						"description": "Type of the item in the 'infe' full box (e.g. 'tili')"
 					},
+					"uncompressProfile": {
+						"type": ["string", "integer", "null"],
+						"minLength": 4,
+						"maxLength": 4,
+						"description": "Type of encoding of uncompressed item (e.g. 'rgb3'). Can be a predefined profile such as 'rgb3' or 0 or not defined if is not predefined."						
+					},
 					"itemName": { 
 						"type": "string",
 						"description": "Name of the item (in the 'infe' full box)"
@@ -217,10 +223,10 @@
 						"description": "Type of the item of the individual tiles (e.g. 'unci') in a grid (or tili TBD)"
 					},	
 					"uncompressProfileTile": {
-						"type": "string",
+						"type": ["string", "integer", "null"],
 						"minLength": 4,
 						"maxLength": 4,
-						"description": "Type of encoding of uncompressed individual tiles (e.g. 'rgb3') in a grid (or tili TBD)"						
+						"description": "Type of encoding of uncompressed individual tiles (e.g. 'rgb3') in a grid (or tili TBD). Can be a predefined profile such as 'rgb3' or 0 or not defined if is not predefined."						
 					},
 					"isTile": { 
 						"type": "boolean",
@@ -340,6 +346,40 @@
 		"fileSize": { 
 			"type": "integer",
 			"description": "File size in bytes"
+		},
+		"brand":{
+			"type": "object",
+			"description" :"The brand is part of the 'ftyp' box (file type box) and is used to identify the file type and which specifications it is compatible with. A brand is a four-character code that says: which standard the file follows, which players or decoders can interpret it, which variant of the format is used",
+			"properties": {
+				"majorBrand": {
+					"type": "string",
+					"minLength": 4,
+					"maxLength": 4,
+					"description":"File major brand (format)"
+				},
+				"minorVersion": {
+					"type": "string",
+					"minLength": 4,
+					"maxLength": 4,
+					"description":"Version of major brand"
+				},
+				"compatibleBrands" : {
+					"type": "array",
+					"description":"other brands the file is compatible with",
+					"items": {
+						"type": "string"
+						"minLength": 4,
+						"maxLength": 4
+					}
+				}
+			}
+		},
+		"mediaHandler":{
+			"type": "string",
+			"minLength": 4,
+			"maxLength": 4,
+			"description": "Media content type of the file or track. Defined by 'hdlr' box. Values can be 'pict' for images, 'vide' for videos, 'meta' for metadata, 'soun' for audio, 'aux' for auxiliari images, etc.",
+			
 		}
 	}
 }
