@@ -382,7 +382,6 @@ function readSOHUncC(dataView, offset, start, fileSize) {
 	offset+=4;
 	result.componentCount=dataView.getUint32(offset);
 	offset+=4;
-	result.samplingType=[];
 	result.componentIndex=[];
 	result.componentBitDepthMinusOne=[];
 	result.componentFormat=[];
@@ -805,6 +804,22 @@ async function readSOHItemsDumpURL(url, sidecarUrl, fileInfo, divIdItem, showDum
 						item.itemTypeTile = itemRel.itemType;
 						if (itemRel.uncompressProfile)
 							item.uncompressProfileTile = itemRel.uncompressProfile;
+						if (itemRel.compressionType)
+							item.compressionTypeTile = itemRel.compressionType;
+						if (itemRel.componentCount)
+							item.componentCountTile = itemRel.componentCount;
+						if (itemRel.componentIndex)
+							item.componentIndexTile = itemRel.componentIndex;
+						if (itemRel.componentBitDepthMinusOne)
+							item.componentBitDepthMinusOneTile = itemRel.componentBitDepthMinusOne;
+						if (itemRel.componentFormat)
+							item.componentFormatTile = itemRel.componentFormat;
+						if (itemRel.componentAlignSize)
+							item.componentAlignSizeTile = itemRel.componentAlignSize;
+						if (itemRel.samplingType)
+							item.samplingTypeTile = itemRel.samplingType;
+						if (itemRel.interleaveType)
+							item.interleaveTypeTile = itemRel.interleaveType;
 					}
 					if (!item.tiles)
 						item.tiles=[];
