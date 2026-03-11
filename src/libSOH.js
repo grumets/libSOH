@@ -107,6 +107,8 @@ async function readSOHPitmBoxURL(url, fileInfo) {
 async function readSOHBoxDumpURL(url, limit, divIdBox, showDump) {
 	var start = 0, result, array=[];
 	var fileSize=await getURLSize(url);
+	if(typeof fileSize==="undefined")
+		return null;
 
 	while (result=await readSOHBoxURL(url, start, fileSize, limit)) {
 		array.push(result);
@@ -130,6 +132,8 @@ async function readSOHBoxDumpURL(url, limit, divIdBox, showDump) {
 		if (start>=fileSize)
 			break;
 	};
+	if(typeof fileSize==="undefined" && typeof array==="undefined")
+		return null;
 	return {boxes: array, fileSize: fileSize};
 }
 
