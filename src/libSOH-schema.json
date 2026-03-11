@@ -88,13 +88,7 @@
 						"minLength": 4,
 						"maxLength": 4,
 						"description": "Type of the item in the 'infe' full box (e.g. 'tili')"
-					},
-					"uncompressProfile": {
-						"type": ["string", "integer", "null"],
-						"minLength": 4,
-						"maxLength": 4,
-						"description": "Type of encoding of uncompressed item (e.g. 'rgb3'). Can be a predefined profile such as 'rgb3' or 0 or not defined if is not predefined."						
-					},
+					},					
 					"itemName": { 
 						"type": "string",
 						"description": "Name of the item (in the 'infe' full box)"
@@ -159,6 +153,103 @@
 							"minimum": 0,
 							"description": "Number of bits per channel in the images"
 						}
+					},
+					"uncompressProfile": {
+						"type": ["string", "integer", "null"],
+						"minLength": 4,
+						"maxLength": 4,
+						"description": "Type of encoding of uncompressed item (e.g. 'rgb3'). Defined in the 'uncC' box when the itemType is 'unci'. Can be a predefined profile such as 'rgb3' or, 0 or not defined if is not predefined, in this case the configuration is completely described with the remaining fields."						
+					},
+					"componentCount": {
+						"type": "integer",
+						"description": "Number of components per pixel/frame. Defined in the 'uncC' box when the itemType is 'unci'.",
+					},
+					"componentIndex": {
+						"type": "array",
+						"description": "Component index (starts at 0). It is used to indicate the order of the components. Defined in the 'uncC' box when the itemType is 'unci'.",
+						"items": {
+							"type": "integer",
+							"minimum": 0
+						}
+					},
+					"componentBitDepthMinusOne": {
+						"type": "array",
+						"description": "Size in bits minus one of the values for each component. Defined in the 'uncC' box when the itemType is 'unci'.",
+						"items": {
+							"type": "integer"
+						}
+					},
+					"componentFormat": {
+						"type": "array",
+						"description": "Data type of the values for each component. Defined in the 'uncC' box when the itemType is 'unci'. Can be '0' if the values are unsigned integer numbers, '1' if the values are float numbers, '2' if the values are complex numbers, '3' if the values are signed integer numbers or >3 for other formats.",
+						"items": {
+							"type": "integer"
+						}
+					},
+					"componentAlignSize": {
+						"type": "array",
+						"description": "Align size in memory per component. Defined in the 'uncC' box when the itemType is 'unci'. If it is 0, the component value is coded on component bit depth bits exactly",
+						"items": {
+							"type": "integer"
+						}
+					},
+					"samplingType":{
+						"type": "integer",
+						"description": "Sampling mode. Defined in the 'uncC' box when the itemType is 'unci'."
+					},
+					"interleaveType":{
+						"type": "integer",
+						"description": "Interleaving type of the components. Defined in the 'uncC' box when the itemType is 'unci'. Pixel, Component, Row... interleave"
+					},
+					"componentsLittleEndian":{
+						"type": "integer",
+						"description": "Components are stored as little endian? '0' is big-endian, '1' is little-endian.  Defined in the 'uncC' box when the itemType is 'unci'. "
+					},
+					"blockPadLsb":{
+						"type": "integer",
+						"description": "Indicates padding bits location. Defined in the 'uncC' box when the itemType is 'unci'. "
+					},
+					"blockLittleEndian":{
+						"type": "integer",
+						"description": "Indicates block endianness. '0' is big-endian, '1' is little-endian. Defined in the 'uncC' box when the itemType is 'unci'. "
+					},
+					"blockReversed":{
+						"type": "integer",
+						"description": "Indicates if component order is reversed within the block. Defined in the 'uncC' box when the itemType is 'unci'. "
+					},
+					"padUnknown":{
+						"type": "integer",
+						"description": "Indicates that the value of padded bits in blocks or padded components is unknown. Defined in the 'uncC' box when the itemType is 'unci'. "
+					},
+					"pixelSize":{
+						"type": "integer",
+						"description": "Indicates the total number of bytes (including component and block padding) used to store all components for a single pixel when component values for that pixel are interleaved. Defined in the 'uncC' box when the itemType is 'unci'. "
+					},
+					"blockSize":{
+						"type": "integer",
+						"description": "Size in bytes of blocks. If !=0 indicates that is tiled. Defined in the 'uncC' box when the itemType is 'unci' and when is tiled (another tile type than 'grid' and 'tili'). "
+					},
+					"rowAlignSize":{
+						"type": "integer",
+						"description": "Indicates the padding between rows. Defined in the 'uncC' box when the itemType is 'unci' and when is tiled. "
+					},
+					"tileAlignSize":{
+						"type": "integer",
+						"description": "indicates the padding between tiles. Defined in the 'uncC' box when the itemType is 'unci' and when is tiled. "
+					},
+					"numTileColsMinusOne":{
+						"type": "integer",
+						"description": "The horizontal number minus one of tiles in the frame/image. Defined in the 'uncC' box when the itemType is 'unci' and when is tiled. "
+					},
+					"numTileRowsMinusOne":{
+						"type": "integer",
+						"description": "The vertical number minus one of tiles in the frame/image. Defined in the 'uncC' box when the itemType is 'unci' and when is tiled. "
+					},
+					"compressionType": {
+						"type": ["string", "null"],
+						"minLength": 4,
+						"maxLength": 4,
+						"description": "Compression type in the frame/image/item. Defined in 'cmpC' box (Compression Configuration Box) when the itemType is 'unci'."
 					},
 					"tileWidth": { 
 						"type": "integer",
@@ -226,7 +317,78 @@
 						"type": ["string", "integer", "null"],
 						"minLength": 4,
 						"maxLength": 4,
-						"description": "Type of encoding of uncompressed individual tiles (e.g. 'rgb3') in a grid (or tili TBD). Can be a predefined profile such as 'rgb3' or 0 or not defined if is not predefined."						
+						"description": "Type of encoding of uncompressed individual tiles (e.g. 'rgb3'). Defined in the 'uncC' box when the itemType is 'unci'. Can be a predefined profile such as 'rgb3' or, 0 or not defined if is not predefined, in this case the configuration is completely described with the remaining fields."						
+					},
+					"componentCountTile": {
+						"type": "integer",
+						"description": "Number of components per pixel/frame. Defined in the 'uncC' box when the itemType is 'unci'.",
+					},
+					"componentIndexTile": {
+						"type": "array",
+						"description": "Component index (starts at 0). It is used to indicate the order of the components. Defined in the 'uncC' box when the itemType is 'unci'.",
+						"items": {
+							"type": "integer",
+							"minimum": 0
+						}
+					},
+					"componentBitDepthMinusOneTile": {
+						"type": "array",
+						"description": "Size in bits minus one of the values for each component. Defined in the 'uncC' box when the itemType is 'unci'.",
+						"items": {
+							"type": "integer"
+						}
+					},
+					"componentFormatTile": {
+						"type": "array",
+						"description": "Data type of the values for each component. Defined in the 'uncC' box when the itemType is 'unci'. Can be '0' if the values are unsigned integer numbers, '1' if the values are float numbers, '2' if the values are complex numbers, '3' if the values are signed integer numbers or >3 for other formats.",
+						"items": {
+							"type": "integer"
+						}
+					},
+					"componentAlignSizeTile": {
+						"type": "array",
+						"description": "Align size in memory per component. Defined in the 'uncC' box when the itemType is 'unci'. If it is 0, the component value is coded on component bit depth bits exactly",
+						"items": {
+							"type": "integer"
+						}
+					},
+					"samplingTypeTile":{
+						"type": "integer",
+						"description": "Sampling mode. Defined in the 'uncC' box when the itemType is 'unci'."
+					},
+					"interleaveTypeTile":{
+						"type": "integer",
+						"description": "Interleaving type of the components. Defined in the 'uncC' box when the itemType is 'unci'. Pixel, Component, Row... interleave"
+					},
+					"componentsLittleEndianTile":{
+						"type": "integer",
+						"description": "Components are stored as little endian? '0' is big-endian, '1' is little-endian.  Defined in the 'uncC' box when the itemType is 'unci'. "
+					},
+					"blockPadLsbTile":{
+						"type": "integer",
+						"description": "Indicates padding bits location. Defined in the 'uncC' box when the itemType is 'unci'. "
+					},
+					"blockLittleEndianTile":{
+						"type": "integer",
+						"description": "Indicates block endianness. '0' is big-endian, '1' is little-endian. Defined in the 'uncC' box when the itemType is 'unci'. "
+					},
+					"blockReversedTile":{
+						"type": "integer",
+						"description": "Indicates if component order is reversed within the block. Defined in the 'uncC' box when the itemType is 'unci'. "
+					},
+					"padUnknownTile":{
+						"type": "integer",
+						"description": "Indicates that the value of padded bits in blocks or padded components is unknown. Defined in the 'uncC' box when the itemType is 'unci'. "
+					},
+					"pixelSizeTile":{
+						"type": "integer",
+						"description": "Indicates the total number of bytes (including component and block padding) used to store all components for a single pixel when component values for that pixel are interleaved. Defined in the 'uncC' box when the itemType is 'unci'. "
+					},
+					"compressionTypeTile": {
+						"type": ["string", "null"],
+						"minLength": 4,
+						"maxLength": 4,
+						"description": "Compression type in the tile of the frame/image/item. Defined in 'cmpC' box (Compression Configuration Box) when the itemType is 'unci'."
 					},
 					"isTile": { 
 						"type": "boolean",

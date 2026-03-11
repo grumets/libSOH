@@ -802,10 +802,9 @@ async function readSOHItemsDumpURL(url, sidecarUrl, fileInfo, divIdItem, showDum
 						item.matrixWidth = Math.trunc((item.imageWidth + item.tileWidth -1)/item.tileWidth);
 						item.matrixHeight = Math.trunc((item.imageHeight + item.tileHeight -1)/item.tileHeight);
 						item.itemTypeTile = itemRel.itemType;
+						// From uncC box
 						if (itemRel.uncompressProfile)
 							item.uncompressProfileTile = itemRel.uncompressProfile;
-						if (itemRel.compressionType)
-							item.compressionTypeTile = itemRel.compressionType;
 						if (itemRel.componentCount)
 							item.componentCountTile = itemRel.componentCount;
 						if (itemRel.componentIndex)
@@ -820,6 +819,21 @@ async function readSOHItemsDumpURL(url, sidecarUrl, fileInfo, divIdItem, showDum
 							item.samplingTypeTile = itemRel.samplingType;
 						if (itemRel.interleaveType)
 							item.interleaveTypeTile = itemRel.interleaveType;
+						if (itemRel.componentsLittleEndian)
+							item.componentsLittleEndianTile = itemRel.componentsLittleEndian;
+						if (itemRel.blockPadLsb)
+							item.blockPadLsbTile = itemRel.blockPadLsb;
+						if (itemRel.blockLittleEndian)
+							item.blockLittleEndianTile = itemRel.blockLittleEndian;
+						if (itemRel.blockReversed)
+							item.blockReversedTile = itemRel.blockReversed;
+						if (itemRel.padUnknown)
+							item.padUnknownTile = itemRel.padUnknown;
+						if (itemRel.pixelSize)
+							item.pixelSizeTile = itemRel.pixelSize;
+						
+						if (itemRel.compressionType)
+							item.compressionTypeTile = itemRel.compressionType;
 					}
 					if (!item.tiles)
 						item.tiles=[];
