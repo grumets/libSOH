@@ -807,36 +807,36 @@ async function readSOHItemsDumpURL(url, sidecarUrl, fileInfo, divIdItem, showDum
 						item.matrixHeight = Math.trunc((item.imageHeight + item.tileHeight -1)/item.tileHeight);
 						item.itemTypeTile = itemRel.itemType;
 						// From uncC box
-						if (itemRel.uncompressProfile)
+						if (typeof itemRel.uncompressProfile!== "undefined")
 							item.uncompressProfileTile = itemRel.uncompressProfile;
-						if (itemRel.componentCount)
+						if (typeof itemRel.componentCount!== "undefined")
 							item.componentCountTile = itemRel.componentCount;
-						if (itemRel.componentIndex)
+						if (typeof itemRel.componentIndex!== "undefined")
 							item.componentIndexTile = itemRel.componentIndex;
-						if (itemRel.componentBitDepthMinusOne)
+						if (typeof itemRel.componentBitDepthMinusOne!== "undefined")
 							item.componentBitDepthMinusOneTile = itemRel.componentBitDepthMinusOne;
-						if (itemRel.componentFormat)
+						if (typeof itemRel.componentFormat!== "undefined")
 							item.componentFormatTile = itemRel.componentFormat;
-						if (itemRel.componentAlignSize)
+						if (typeof itemRel.componentAlignSize!== "undefined")
 							item.componentAlignSizeTile = itemRel.componentAlignSize;
-						if (itemRel.samplingType)
+						if (typeof itemRel.samplingType!== "undefined")
 							item.samplingTypeTile = itemRel.samplingType;
-						if (itemRel.interleaveType)
+						if (typeof itemRel.interleaveTyp!== "undefined")
 							item.interleaveTypeTile = itemRel.interleaveType;
-						if (itemRel.componentsLittleEndian)
+						if (typeof itemRel.componentsLittleEndian!== "undefined")
 							item.componentsLittleEndianTile = itemRel.componentsLittleEndian;
-						if (itemRel.blockPadLsb)
+						if (typeof itemRel.blockPadLsb!== "undefined")
 							item.blockPadLsbTile = itemRel.blockPadLsb;
-						if (itemRel.blockLittleEndian)
+						if (typeof itemRel.blockLittleEndian!== "undefined")
 							item.blockLittleEndianTile = itemRel.blockLittleEndian;
-						if (itemRel.blockReversed)
+						if (typeof itemRel.blockReversed!== "undefined")
 							item.blockReversedTile = itemRel.blockReversed;
-						if (itemRel.padUnknown)
+						if (typeof itemRel.padUnknown!== "undefined")
 							item.padUnknownTile = itemRel.padUnknown;
-						if (itemRel.pixelSize)
+						if (typeof itemRel.pixelSize!== "undefined")
 							item.pixelSizeTile = itemRel.pixelSize;
 						
-						if (itemRel.compressionType)
+						if (typeof itemRel.compressionType!== "undefined")
 							item.compressionTypeTile = itemRel.compressionType;
 					}
 					if (!item.tiles)
