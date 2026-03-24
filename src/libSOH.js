@@ -157,7 +157,7 @@ function getUIntegerByteSize(dataView, offset, byteSize) {
 	if (byteSize==4)
 		return dataView.getUint32(offset);
 	if (byteSize==8)
-		return dataView.getUint64(offset);
+		return Number(dataView.getBigUint64(offset));
 	return 0;
 }
 
@@ -714,7 +714,7 @@ async function readSOHItemsDumpURL(url, sidecarUrl, fileInfo, divIdItem, showDum
 											headerOffsetDV.getUint16(offsetHeader+4);
 							break;
 						case 64:
-							item.tiles[j].offset=headerOffsetDV.getBigUint64(offsetHeader);
+							item.tiles[j].offset=Number(headerOffsetDV.getBigUint64(offsetHeader));
 							break;
 					}
 					offsetHeader+=item.offsetTileLength/8;
@@ -730,7 +730,7 @@ async function readSOHItemsDumpURL(url, sidecarUrl, fileInfo, divIdItem, showDum
 							item.tiles[j].size=headerOffsetDV.getUint32(offsetHeader);
 							break;
 						case 64:
-							item.tiles[j].size=headerOffsetDV.getBigUint64(offsetHeader);
+							item.tiles[j].size=Number(headerOffsetDV.getBigUint64(offsetHeader));
 							break;
 					}
 					offsetHeader+=item.sizeTileLength/8;
@@ -1005,7 +1005,7 @@ async function getBoxLargeSizeURL(url, begin, end, fileSize){
 	var dataView = new DataView(buffer);
 	if(!dataView)
 		return;	
-	var large_size=dataView.getUint64(0);
+	var large_size=Number(dataView.getBigUint64(0));
 	return large_size;	
 }
 
@@ -1071,7 +1071,7 @@ function readSOHBox(dataView, offset, start, fileSize){
 	var type=getBoxType(dataView, offset+4);
 	offset+=8; 
 	if (size==1) {
-		size=dataView.getUint64(offset+8)
+		size=Number(dataView.getBigUint64(offset+8));
 		offset+=8;
 	}
 	if (type=="uuid") {
@@ -1117,7 +1117,7 @@ async function readSOHBoxURL(url, start, fileSize, limit){
 		// the size is a largesize
 		begin=end+1;
 		end=begin+7;
-		var size = getBoxLargeSizeURL(url, begin, end, fileSize);
+		var size = await getBoxLargeSizeURL(url, begin, end, fileSize);
 		dataOffset+=8;		
 	}	
 
@@ -1136,9 +1136,10 @@ async function readSOHBoxURL(url, start, fileSize, limit){
 	}
 		
 	if (size==dataOffset ||   //This is an empty box
-	    (limit && limit==-1)) //Do not read the content 
+	    (limit && limit==-1) || //Do not read the content
+		(type=="mdat" && !limit) )  // Do not read the content
   		return {start: start, size: size, type: type, dataOffset: dataOffset};
-
+		
 	begin=start+dataOffset;
 	end=(limit && (size-dataOffset)>limit) ? begin+limit-1 : start+size-1;
 	buffer=await getURLBuffer(url, begin, end);
