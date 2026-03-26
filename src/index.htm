@@ -267,22 +267,22 @@ function showSOHImage(data, canvasId, width, height, scaleFactor) {
 	ctx.drawImage(canvas_temp, 0, 0, width*scaleFactor, height*scaleFactor);
 }
 
-async function getSOHImage(url, item, offsetMdat, iTile, jTile){
+async function getSOHImage(url, item, iTile, jTile){
 
 	if(!item)
 		return null;
 	if (item.tileWidth && item.tileHeight)
-		return await getURLBuffer(url, offsetMdat+item.tiles[jTile*item.matrixWidth+iTile].offset, offsetMdat+item.tiles[jTile*item.matrixWidth+iTile].offset+item.tiles[jTile*item.matrixWidth+iTile].size-1);
+		return await getURLBuffer(url, item.tiles[jTile*item.matrixWidth+iTile].offset, item.tiles[jTile*item.matrixWidth+iTile].offset+item.tiles[jTile*item.matrixWidth+iTile].size-1);
 	return await getURLBuffer(url, item.extents[0].extentOffset, item.extents[0].extentOffset+item.extents[0].extentLength-1);
 }
 
 // Image Item in UNCI
-async function getAndshowSOHUnciImage(url, item, scaleFactor, offsetMdat, iTile, jTile)
+async function getAndshowSOHUnciImage(url, item, scaleFactor, iTile, jTile)
 {
 	var arrayBuffer=null, itemType, uncompressProfile, height, width, canvasId;
 	if (item.tileWidth && item.tileHeight) {
 		itemType=item.itemTypeTile;
-		uncompressProfile=item.uncompressProfileTile;
+		uncompressProfile=item.uncompressProfile;
 		width=item.tileWidth;
 		height=item.tileHeight;
 		canvasId=item.itemId + "_" + jTile + "_" + iTile;		
@@ -294,9 +294,9 @@ async function getAndshowSOHUnciImage(url, item, scaleFactor, offsetMdat, iTile,
 		height=item.imageHeight;
 		canvasId=item.itemId;
 	}
-	if(itemType!='unci' || uncompressProfile!="rgb3")   //RGB 24 bits packed {'rgb3', 3, [{4,7},{5,7},{6,7}], 0, 1}
-		return;	
-	arrayBuffer=await getSOHImage(url, item, offsetMdat, iTile, jTile);
+	/*if(itemType!='unci' || uncompressProfile!="rgb3")   //RGB 24 bits packed {'rgb3', 3, [{4,7},{5,7},{6,7}], 0, 1}
+		return;	*/
+	arrayBuffer=await getSOHImage(url, item, iTile, jTile);
 	if(!arrayBuffer)
 		return;
 	
@@ -337,7 +337,7 @@ function getAndConvertImageYUV2RGB(image){
 	return image.ImageData.data;
 }
 
-async function getAndshowSOHH265Image(url, item, scaleFactor, offsetMdat, iTile, jTile, itemsArray){
+async function getAndshowSOHH265Image(url, item, scaleFactor, iTile, jTile, itemsArray){
 var arrayBuffer=null, itemType, height, width, canvasId, tileItem;
 
 	if(!item)
@@ -365,7 +365,7 @@ var arrayBuffer=null, itemType, height, width, canvasId, tileItem;
 	}
 	if(itemType!='hvc1')
 		return;
-	arrayBuffer=await getSOHImage(url, item, offsetMdat, iTile, jTile);
+	arrayBuffer=await getSOHImage(url, item, iTile, jTile);
 	if(!arrayBuffer)
 		return;
 
@@ -444,7 +444,7 @@ function ycbcrToRgb(y, cb, cr) {
 }
 
 
-async function getAndshowSOHJ2KImage(url, item, scaleFactor, offsetMdat, iTile, jTile, itemsArray)
+async function getAndshowSOHJ2KImage(url, item, scaleFactor, iTile, jTile, itemsArray)
 {
 	var arrayBuffer=null, itemType, tileItem, height, width, canvasId, colorSpace, iR,iB,iG,iY,iCb,iCr,iA;
 
@@ -473,7 +473,7 @@ async function getAndshowSOHJ2KImage(url, item, scaleFactor, offsetMdat, iTile, 
 	}
 	if(itemType!='j2k1')
 		return;
-	arrayBuffer=await getSOHImage(url, item, offsetMdat, iTile, jTile);
+	arrayBuffer=await getSOHImage(url, item, iTile, jTile);
 	if(!arrayBuffer)
 		return;
 
@@ -500,21 +500,21 @@ async function getAndshowSOHJ2KImage(url, item, scaleFactor, offsetMdat, iTile, 
 		var cdef= (item.cdef) ? item.cdef : (tileItem ? tileItem.cdef : null);
 		if(cdef)
 		{
-			for(i=0;i<cdef.nComp; i++){
-				if(cdef.result.comp[i].type==1)
-					iY=cdef.result.comp[i].index;
-				else if(cdef.result.comp[i].type==2)
-					iCb=cdef.result.comp[i].index;
-				else if(cdef.result.comp[i].type==3)
-					iCr=cdef.result.comp[i].index;
-				else if(cdef.result.comp[i].type==4)
-					iR=cdef.result.comp[i].index;
-				else if(cdef.result.comp[i].type==5)
-					iG=cdef.result.comp[i].index;
-				else if(cdef.result.comp[i].type==6)
-					iB=cdef.result.comp[i].index;
-				else if(cdef.result.comp[i].type==7)
-					iA=cdef.result.comp[i].index;
+			for(var i=0;i<cdef.nComp; i++){
+				if(cdef.comp[i].type==1)
+					iY=cdef.comp[i].index;
+				else if(cdef.comp[i].type==2)
+					iCb=cdef.comp[i].index;
+				else if(cdef.comp[i].type==3)
+					iCr=cdef.comp[i].index;
+				else if(cdef.comp[i].type==4)
+					iR=cdef.comp[i].index;
+				else if(cdef.comp[i].type==5)
+					iG=cdef.comp[i].index;
+				else if(cdef.comp[i].type==6)
+					iB=cdef.comp[i].index;
+				else if(cdef.comp[i].type==7)
+					iA=cdef.comp[i].index;
 			}
 		}
 		if(iR!=-1 && iA==-1)
@@ -592,7 +592,7 @@ async function getAndshowSOHJ2KImage(url, item, scaleFactor, offsetMdat, iTile, 
 function isSOHImageTypeSupported(itemType, uncompressProfile)
 {
 	//if(itemType=='avc1' || itemType=='jpeg')  // codes supported for Still Imagery	
-	if(itemType=='j2k1' || (itemType=='unci' && uncompressProfile=="rgb3") || itemType=='hvc1')
+	if(itemType=='j2k1' || (itemType=='unci' && (!uncompressProfile || uncompressProfile=="rgb3")) || itemType=='hvc1')
 		return true;
 	return false;	
 }
@@ -603,7 +603,6 @@ async function showSOHImagesItems(url, fileInfo, divId) {
 	var mdat=getIndexSOHBoxType(fileInfo.boxes, "mdat");
 	if (mdat==-1)
 		return;
-	var offsetMdat=fileInfo.boxes[mdat].start;
 
 	var s="<H3>Item images</H3>";
 	for (var a=0; a<fileInfo.items.length; a++) {
@@ -614,7 +613,7 @@ async function showSOHImagesItems(url, fileInfo, divId) {
 				for (var j=0; j<item.matrixHeight; j++) {
 					s+="<tr>";
 					for (var i=0; i<item.matrixWidth; i++) {
-						if(isSOHImageTypeSupported(item.itemTypeTile, item.uncompressProfileTile))
+						if(isSOHImageTypeSupported(item.itemTypeTile, item.uncompressProfile))
 						{
 							s+="<td>Tile (" + j + "," + i + ")<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"+
 								preparecanvasSOHImage(item.itemId + "_" + j + "_" + i, item.tileWidth, item.tileHeight, scaleImageFactor)+
@@ -637,12 +636,12 @@ async function showSOHImagesItems(url, fileInfo, divId) {
 			if (item.tileWidth && item.tileHeight) { //is a grid or tili
 				for (var j=0; j<item.matrixHeight; j++) {
 					for (var i=0; i<item.matrixWidth; i++) {
-						if(item.itemTypeTile=='unci' && item.uncompressProfileTile=="rgb3")
-							getAndshowSOHUnciImage(url, item, scaleImageFactor, offsetMdat, i, j);
+						if(item.itemTypeTile=='unci' && (!item.uncompressProfile || item.uncompressProfile=="rgb3"))
+							getAndshowSOHUnciImage(url, item, scaleImageFactor, i, j);
 						else if(item.itemTypeTile=='hvc1')	
-							getAndshowSOHH265Image(url, item, scaleImageFactor, offsetMdat, i, j, fileInfo.items);
+							getAndshowSOHH265Image(url, item, scaleImageFactor, i, j, fileInfo.items);
 						else if(item.itemTypeTile=='j2k1')	
-							getAndshowSOHJ2KImage(url, item, scaleImageFactor, offsetMdat, i, j, fileInfo.items);
+							getAndshowSOHJ2KImage(url, item, scaleImageFactor, i, j, fileInfo.items);
 					}
 				}
 			} else {

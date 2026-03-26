@@ -383,6 +383,10 @@ function readSOHCmpC(dataView, offset, start, fileSize) {
 	offset+=result.dataOffset;
 	result.compressionType=getBoxType(dataView, offset);
 	
+	//‘defl’	DEFLATE algorithm as defined in IETF RFC 1951
+	//‘zlib’	DEFLATE algorithm as packaged in the format defined by IETF RFC 1950
+	//‘brot’	Brotli algorithm as defined in IETF RFC 7932
+	
 	//unsigned int(1) must_decompress_individual_entities can_decompress_contiguous_ranges;
 	//unsigned int(7) compressed_range_typecompressed_entity_type;
 	return result;
@@ -792,6 +796,7 @@ async function readSOHItemsDumpURL(url, sidecarUrl, fileInfo, divIdItem, showDum
 							item.tiles[j].offset=Number(headerOffsetDV.getBigUint64(offsetHeader));
 							break;
 					}
+					item.tiles[j].offset+=item.extents[0].extentOffset; // Converting to absolut offsett from the beginning of the file
 					offsetHeader+=item.offsetTileLength/8;
 					switch(item.sizeTileLength) {
 						case 0:
@@ -917,7 +922,7 @@ async function readSOHItemsDumpURL(url, sidecarUrl, fileInfo, divIdItem, showDum
 					if (!item.tiles)
 						item.tiles=[];
 					if (itemRel.extents && itemRel.extents.length>0)
-						item.tiles.push({offset: itemRel.extents[0].extentOffset-offsetMdat, size: itemRel.extents[0].extentLength, itemId: itemRel.itemId});
+						item.tiles.push({offset: itemRel.extents[0].extentOffset, size: itemRel.extents[0].extentLength, itemId: itemRel.itemId});
 				}
 				if (!item.tiles || item.tiles.length<item.matrixWidth*item.matrixHeight)
 					console.log("This grid item (id:" + item.itemId + ") requires "+item.matrixWidth*item.matrixHeight+" but it only contains " + item.tiles.length + " tiles");
