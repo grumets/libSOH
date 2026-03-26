@@ -200,8 +200,6 @@ function readSOHColr(dataView, offset, start, fileSize) {
 	return result;
 }
 
-
-
 const possibleOffsetTileLengths=[32, 40, 48, 64];
 const possibleSizeTileLengths=[0, 24, 32, 64];
 function readSOHTilC(dataView, offset, start, fileSize) {
@@ -215,7 +213,8 @@ function readSOHTilC(dataView, offset, start, fileSize) {
 	result.sizeTileLength=possibleSizeTileLengths[(result.flags>>2) & 0x03];
 	result.areTileOffsetsSequential=(result.flags & 0x10) ? true : false;
 
-	result.tileCompressionType=getBoxType(dataView, offset+8);
+	result.itemTypeTile=getBoxType(dataView, offset+8); // the standard name, in the version implemented, is tile_compression_type (in the last draft is tile_item_type)
+	
 
 	var numberOfExtraDimensions=dataView.getUint8(offset+12);
 	offset+=13;
@@ -235,6 +234,26 @@ function readSOHTilC(dataView, offset, start, fileSize) {
 	  	for (var i=0; i<numberOfTileProperties; i++) { 
 			prop=readSOHBox(dataView, offset, start, fileSize);
 			result.tileProperties[i]=prop.type;
+			if (prop.type=="ispe")
+				prop=readSOHIspe(dataView, offset, start, fileSize);
+			else if (prop.type=="pixi")
+				prop=readSOHPixi(dataView, offset, start, fileSize);
+			else if (prop.type=="colr")
+				prop=readSOHColr(dataView, offset, start, fileSize);
+			else if (prop.type=="hvcC")
+				prop=readSOHHvcC(dataView, offset, start, fileSize);
+			else if (prop.type=="uncC")
+				prop=readSOHUncC(dataView, offset, start, fileSize);
+			else if (prop.type=="cmpC")
+				prop=readSOHCmpC(dataView, offset, start, fileSize);
+			else if (prop.type=="cmpd")
+				prop=readSOHCmpd(dataView, offset, start, fileSize);
+			else if (prop.type=="j2kH")
+				prop=readSOHJ2kH(dataView, offset, start, fileSize);
+			else 
+				continue;
+			copyPropertiesIpcoBox(result, prop);
+			
 			offset+=prop.size;
 		}
 	}
@@ -307,7 +326,7 @@ function readSOHHvcC(dataView, offset, start, fileSize) {
 }
 
 
-function readSOCcdef(dataView, offset, start, fileSize) {
+function readSOHCdef(dataView, offset, start, fileSize) {
 	var result=readSOHBox(dataView, offset, start, fileSize);
 	offset+=result.dataOffset;
 	// cdef (ComponentDefinitionBox)
@@ -342,7 +361,7 @@ function readSOCcdef(dataView, offset, start, fileSize) {
 	return result;
 }
 
-function readSOCJ2kH(dataView, offset, start, fileSize) {
+function readSOHJ2kH(dataView, offset, start, fileSize) {
 	var result=readSOHBox(dataView, offset, start, fileSize);
 	var resultSize=offset+result.size;
 	offset+=result.dataOffset;
@@ -351,7 +370,7 @@ function readSOCJ2kH(dataView, offset, start, fileSize) {
 		boxes=readSOHBox(dataView, offset, start, fileSize);
 		if (boxes.type=='cdef') {
 			//read 'cdef'
-			result.cdef=readSOCcdef(dataView, offset, start, fileSize);
+			result.cdef=readSOHCdef(dataView, offset, start, fileSize);
 		}
 		offset+=boxes.size;
 	}
@@ -369,6 +388,56 @@ function readSOHCmpC(dataView, offset, start, fileSize) {
 	return result;
 }
 
+
+/*aligned(8) class ComponentDefinitionBox extends Box('cmpd') {
+	unsigned int(32) component_count;	
+	{
+		unsigned int(16) component_type;
+		if (component_type>=0x8000) {
+			utf8string component_type_uri;
+		}
+	} [component_count];
+}*/
+
+function readSOHCmpd(dataView, offset, start, fileSize) {
+	var result=readSOHBox(dataView, offset, start, fileSize);
+	offset+=result.dataOffset;
+	// cmpd (ComponentDefinitionBox)
+	
+	// number of component definitions
+	result.componentCountDef=dataView.getUint32(offset);
+	offset+=4;
+	if(!result.componentCountDef)
+		return result;
+	result.componentTypeDef=[];
+	for (var i = 0; i < result.componentCountDef; i++) {
+		result.componentTypeDef[i]=dataView.getUint16(offset);
+		/*Type – Component type (16 bits)
+		0	Monochrome component 
+		1	Luma component (Y)
+		2	Chroma component (Cb / U)
+		3	Chroma component (Cr / V)
+		4	Red component (R)
+		5	Green component (G)
+		6	Blue component(B)
+		7	Alpha/transparency component (A)
+		8	Depth component (D)
+		9	Disparity component (Disp)
+		10	Palette component (P)
+		The component_format value for this component shall be 0.
+		11	Filter Array component such as Bayer, RGBW, etc. (FA)
+		12	Padded component (unused bits/bytes)
+		13-0x7FFF	ISO/IEC reserved*/
+		offset+=2;
+		if(result.componentTypeDef[i] >= 0x8000) // user defined
+		{
+			result.componentTypeDef[i]=getSOHString(dataView, offset, offset+result.size);
+			offset+=getSOHStringSize(items[i].itemName, offset, offset+result.size);
+		}
+		
+	}
+	return result;
+}
 
 function readSOHUncC(dataView, offset, start, fileSize) {
 	//uncC UncompressedFrameConfigBox
@@ -427,6 +496,8 @@ function readSOHUncC(dataView, offset, start, fileSize) {
 }
 
 function copyPropertiesIpcoBox(item, prop) {
+	if(!prop)
+		return;
 	var propArray=Object.keys(prop);
 	for (var i=0; i<propArray.length; i++){
 		if (propArray[i]=="size" || propArray[i]=="type" || propArray[i]=="dataOffset" || propArray[i]=="version" || propArray[i]=="flags")
@@ -628,8 +699,10 @@ async function readSOHItemsDumpURL(url, sidecarUrl, fileInfo, divIdItem, showDum
 			prop=readSOHUncC(dataView, offset, start, fileInfo.fileSize);
 		else if (prop.type=="cmpC")
 			prop=readSOHCmpC(dataView, offset, start, fileInfo.fileSize);
+		else if (prop.type=="cmpd")
+			prop=readSOHCmpd(dataView, offset, start, fileInfo.fileSize);
 		else if (prop.type=="j2kH")
-			prop=readSOCJ2kH(dataView, offset, start, fileInfo.fileSize);
+			prop=readSOHJ2kH(dataView, offset, start, fileInfo.fileSize);
 		else if (prop.type=="uuid") 
 			prop.contentId=getSOHString(dataView, offset+prop.dataOffset, offset+prop.size);
 
@@ -675,7 +748,9 @@ async function readSOHItemsDumpURL(url, sidecarUrl, fileInfo, divIdItem, showDum
 			propIndex--;
 			if (propIndex<props.length) {
 				item.associations[j].type=props[propIndex].type;
-				if (props[propIndex].type=="ispe" || props[propIndex].type=="pixi" || props[propIndex].type=="uuid" || props[propIndex].type=="tilC" || props[propIndex].type=="hvcC" || props[propIndex].type=="uncC")
+				if (props[propIndex].type=="ispe" || props[propIndex].type=="pixi" || props[propIndex].type=="uuid" || props[propIndex].type=="colr" || 
+					props[propIndex].type=="tilC" || props[propIndex].type=="hvcC" || props[propIndex].type=="uncC" || props[propIndex].type=="cmpC" || 
+					props[propIndex].type=="cmpd" || props[propIndex].type=="j2kH")
 					copyPropertiesIpcoBox(item, props[propIndex]);
 			}
 		}
@@ -805,39 +880,39 @@ async function readSOHItemsDumpURL(url, sidecarUrl, fileInfo, divIdItem, showDum
 						item.tileHeight=itemRel.imageHeight;
 						item.matrixWidth = Math.trunc((item.imageWidth + item.tileWidth -1)/item.tileWidth);
 						item.matrixHeight = Math.trunc((item.imageHeight + item.tileHeight -1)/item.tileHeight);
-						item.itemTypeTile = itemRel.itemType;
+						item.itemTypeTile = itemRel.itemType;						
 						// From uncC box
 						if (typeof itemRel.uncompressProfile!== "undefined")
-							item.uncompressProfileTile = itemRel.uncompressProfile;
+							item.uncompressProfile = itemRel.uncompressProfile;
 						if (typeof itemRel.componentCount!== "undefined")
-							item.componentCountTile = itemRel.componentCount;
+							item.componentCount = itemRel.componentCount;
 						if (typeof itemRel.componentIndex!== "undefined")
-							item.componentIndexTile = itemRel.componentIndex;
+							item.componentIndex = itemRel.componentIndex;
 						if (typeof itemRel.componentBitDepthMinusOne!== "undefined")
-							item.componentBitDepthMinusOneTile = itemRel.componentBitDepthMinusOne;
+							item.componentBitDepthMinusOne = itemRel.componentBitDepthMinusOne;
 						if (typeof itemRel.componentFormat!== "undefined")
-							item.componentFormatTile = itemRel.componentFormat;
+							item.componentFormat = itemRel.componentFormat;
 						if (typeof itemRel.componentAlignSize!== "undefined")
-							item.componentAlignSizeTile = itemRel.componentAlignSize;
+							item.componentAlignSize = itemRel.componentAlignSize;
 						if (typeof itemRel.samplingType!== "undefined")
-							item.samplingTypeTile = itemRel.samplingType;
-						if (typeof itemRel.interleaveTyp!== "undefined")
-							item.interleaveTypeTile = itemRel.interleaveType;
+							item.samplingType = itemRel.samplingType;
+						if (typeof itemRel.interleaveType!== "undefined")
+							item.interleaveType = itemRel.interleaveType;
 						if (typeof itemRel.componentsLittleEndian!== "undefined")
-							item.componentsLittleEndianTile = itemRel.componentsLittleEndian;
+							item.componentsLittleEndian = itemRel.componentsLittleEndian;
 						if (typeof itemRel.blockPadLsb!== "undefined")
-							item.blockPadLsbTile = itemRel.blockPadLsb;
+							item.blockPadLsb = itemRel.blockPadLsb;
 						if (typeof itemRel.blockLittleEndian!== "undefined")
-							item.blockLittleEndianTile = itemRel.blockLittleEndian;
+							item.blockLittleEndian = itemRel.blockLittleEndian;
 						if (typeof itemRel.blockReversed!== "undefined")
-							item.blockReversedTile = itemRel.blockReversed;
+							item.blockReversed = itemRel.blockReversed;
 						if (typeof itemRel.padUnknown!== "undefined")
-							item.padUnknownTile = itemRel.padUnknown;
+							item.padUnknown = itemRel.padUnknown;
 						if (typeof itemRel.pixelSize!== "undefined")
-							item.pixelSizeTile = itemRel.pixelSize;
-						
+							item.pixelSize = itemRel.pixelSize;
+						// From cmpC box
 						if (typeof itemRel.compressionType!== "undefined")
-							item.compressionTypeTile = itemRel.compressionType;
+							item.compressionType = itemRel.compressionType;
 					}
 					if (!item.tiles)
 						item.tiles=[];
