@@ -506,6 +506,7 @@ function copyPropertiesIpcoBox(item, prop) {
 	for (var i=0; i<propArray.length; i++){
 		if (propArray[i]=="size" || propArray[i]=="type" || propArray[i]=="dataOffset" || propArray[i]=="version" || propArray[i]=="flags")
 			continue;
+		if(typeof item[propArray[i]]==="undefined" || item[propArray[i]]==null || item[propArray[i]]=="")  // NJ I've seen that sometimes the same property is there twice.
 		item[propArray[i]]=prop[propArray[i]];
 	}
 }
