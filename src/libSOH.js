@@ -85,8 +85,7 @@ async function readSOHPitmBoxURL(url, fileInfo) {
 		return null;
 
 	var start=fileInfo.boxes[i].start;
-	
-	
+		
 	var result=await readSOHBoxURL(url, start, fileInfo.fileSize);
 	var dataView=result.dataView;
 	//var dvOffset=result.dataOffset;
@@ -507,7 +506,7 @@ function copyPropertiesIpcoBox(item, prop) {
 		if (propArray[i]=="size" || propArray[i]=="type" || propArray[i]=="dataOffset" || propArray[i]=="version" || propArray[i]=="flags")
 			continue;
 		if(typeof item[propArray[i]]==="undefined" || item[propArray[i]]==null || item[propArray[i]]=="")  // NJ I've seen that sometimes the same property is there twice.
-		item[propArray[i]]=prop[propArray[i]];
+			item[propArray[i]]=prop[propArray[i]];
 	}
 }
 
@@ -934,14 +933,17 @@ async function readSOHItemsDumpURL(url, sidecarUrl, fileInfo, divIdItem, showDum
 		}		
 	}
 	if (sidecarUrl) {
-		addGeoreferenceToItems(items, await getURLText(sidecarUrl));
+		var ttl=await getURLText(sidecarUrl);
+		fileInfo.ttlJsonld = ttl2jsonld.parse(ttl);
+		addGeoreferenceToItems(items, fileInfo.ttlJsonld);
 		if (showDump)
 			showDump(items, divIdItem);
 	} else {
 		for (var i=0; i<items.length; i++) {
 			if (items[i].itemType=='mime' && items[i].contentType=="text/turtle" && items[i].extents && items[i].extents.length) {
-				fileInfo.hasTtlMd=true;
-				addGeoreferenceToItems(items, await getURLText(url, items[i].extents[0].extentOffset, items[i].extents[0].extentOffset+items[i].extents[0].extentLength-1));
+				var ttl=await getURLText(url, items[i].extents[0].extentOffset, items[i].extents[0].extentOffset+items[i].extents[0].extentLength-1);
+				fileInfo.ttlJsonld = ttl2jsonld.parse(ttl);
+				addGeoreferenceToItems(items, fileInfo.ttlJsonld);
 				if (showDump)
 					showDump(items, divIdItem);
 				break;
@@ -1235,8 +1237,8 @@ async function readSOHBoxURL(url, start, fileSize, limit){
 	return {start: start, size: size, type: type, dataOffset: dataOffset, dataView: dataView};
 }
 
-function addGeoreferenceToItems(items, ttl){
-	const jsonld = ttl2jsonld.parse(ttl);
+function addGeoreferenceToItems(items, jsonld){
+	
 	for (var i=0; i<items.length; i++) {
 		if (!items[i].contentId)
 			continue;
